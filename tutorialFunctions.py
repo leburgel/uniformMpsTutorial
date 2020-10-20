@@ -250,8 +250,8 @@ def entanglementSpectrum(aL, aR, L, R, truncate=0):
     #apply a truncation step keep 'truncate' singular values
     if truncate:
         S = S[:truncate]
-        U = U[:,:truncate]
-        V = V[:truncate,:]
+        U = U[:, :truncate]
+        V = V[:truncate, :]
 
         #transform aL and aR through unitary
         aLU = np.einsum('ij,jkl->ikl', np.conj(U).T, aL)
