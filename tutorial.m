@@ -217,24 +217,23 @@ Jx = 1; Jy = 1; Jz = 1; h = 0;
 H = -Jx*ncon({Sx, Sx}, {[-1 -3], [-2 -4]}) - Jy*ncon({Sy, Sy}, {[-1 -3], [-2 -4]}) - Jz*ncon({Sz, Sz}, {[-1 -3], [-2 -4]})...
         - h*ncon({Sz, eye(3)}, {[-1 -3], [-2 -4]}) - h*ncon({eye(3), eye(3)}, {[-1 -3], [-2 -4]});
   
-% % most naive approach: this doesn't converge (but energy keesps going down at least)
-% A = randcomplex(D, d, D);
-% tl = 1e-4;
-% epsilon = 0.045;
-% flag = true;
-% while flag
-%     [e, g] = EnergyDensity(A, H);
-%     e
-%     g
-%     Aprime = A - epsilon * g;
-%     if ArrayIsEqual(A, Aprime, tl)
-%         flag = false;
-%     else
-%         A = Aprime;
-%     end
-% end
+% most naive approach: converges to same energy as fminunc (but never quite gets there...)
+A = randcomplex(D, d, D);
+tl = 1e-4;
+epsilon = 0.045;
+flag = true;
+while flag
+    [e, g] = EnergyDensity(A, H);
+    e
+    Aprime = A - epsilon * g;
+    if ArrayIsEqual(A, Aprime, tl)
+        flag = false;
+    else
+        A = Aprime;
+    end
+end
 
-% running now, but 'converges' to different energy every time...
+% running now, converges to the same energy every time
 ReA = rand(D, d, D);
 ImA = rand(D, d, D);
 varA = [reshape(ReA, [], 1); reshape(ImA, [], 1)];
