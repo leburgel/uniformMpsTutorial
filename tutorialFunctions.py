@@ -295,5 +295,5 @@ def CreateSz():
 def Heisenberg(Jx,Jy,Jz,h):
     Sx, Sy, Sz = CreateSx(),CreateSy(),CreateSz()
     I = np.identity(3)
-    return -Jx*np.einsum('ij,kl->ijkl',Sx, Sx)-Jy*np.einsum('ij,kl->ijkl',Sy, Sy)-Jz*np.einsum('ij,kl->ijkl',Sz, Sz) /
+    return -Jx*np.einsum('ij,kl->ijkl',Sx, Sx)-Jy*np.einsum('ij,kl->ijkl',Sy, Sy)-Jz*np.einsum('ij,kl->ijkl',Sz, Sz) \
             - h*np.einsum('ij,kl->ijkl',I,Sz) - h*np.einsum('ij,kl->ijkl',Sz,I)
