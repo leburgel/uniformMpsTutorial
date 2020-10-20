@@ -217,7 +217,7 @@ Jx = 1; Jy = 1; Jz = 1; h = 0;
 H = -Jx*ncon({Sx, Sx}, {[-1 -3], [-2 -4]}) - Jy*ncon({Sy, Sy}, {[-1 -3], [-2 -4]}) - Jz*ncon({Sz, Sz}, {[-1 -3], [-2 -4]})...
         - h*ncon({Sz, eye(3)}, {[-1 -3], [-2 -4]}) - h*ncon({eye(3), eye(3)}, {[-1 -3], [-2 -4]});
   
-% % most naive approach: this doesn't converge (but energy keesps going down), something wrong with linear problem in gradient calculation I guess...
+% % most naive approach: this doesn't converge (but energy keesps going down at least)
 % A = randcomplex(D, d, D);
 % tl = 1e-4;
 % epsilon = 0.045;
@@ -225,6 +225,7 @@ H = -Jx*ncon({Sx, Sx}, {[-1 -3], [-2 -4]}) - Jy*ncon({Sy, Sy}, {[-1 -3], [-2 -4]
 % while flag
 %     [e, g] = EnergyDensity(A, H);
 %     e
+%     g
 %     Aprime = A - epsilon * g;
 %     if ArrayIsEqual(A, Aprime, tl)
 %         flag = false;
@@ -233,11 +234,14 @@ H = -Jx*ncon({Sx, Sx}, {[-1 -3], [-2 -4]}) - Jy*ncon({Sy, Sy}, {[-1 -3], [-2 -4]
 %     end
 % end
 
-% and this one throws a mean error, again caused by somthing going wrong in gradient calculation
-A = randcomplex(D, d, D);
+% running now, but 'converges' to different energy every time...
+ReA = rand(D, d, D);
+ImA = rand(D, d, D);
+varA = [reshape(ReA, [], 1); reshape(ImA, [], 1)];
+EnergyHandle = @(varA) EnergyWrapper(varA, H, D, d);
 options = optimoptions('fminunc', 'SpecifyObjectiveGradient', true);
-EnergyHandle = @(A) EnergyDensity(A, H);
-Aopt = fminunc(EnergyHandle, A, options);
+[Aopt, e] = fminunc(EnergyHandle, varA, options);
+Aopt = complex(reshape(Aopt(1:D^2*d), [D d D]), reshape(Aopt(D^2*d+1:end), [D d D]));
 
 % so no succes so far!
 
@@ -415,8 +419,14 @@ end
 
 function [e, g] = EnergyDensity(A, H)
     [A, l, r] = NormalizeMPS(A);
-    e = ExpvTwoSiteUniform(l, r, A, H); % compute energy density of MPS
+    e = real(ExpvTwoSiteUniform(l, r, A, H)); % compute energy density of MPS (discard numerical imaginary artefact)
     Htilde = H - e; % regularized energy density
     % calculate gradient of energy density
     g = EnergyGradient(A, l, r, Htilde);
+end
+
+function [e, g] = EnergyWrapper(varA, H, D, d)
+    A = complex(reshape(varA(1:D^2*d), [D d D]), reshape(varA(D^2*d+1:end), [D d D]));
+    [e, g] = EnergyDensity(A, H);
+    g = [reshape(real(g), [], 1); reshape(imag(g), [], 1)];
 end
