@@ -231,7 +231,7 @@ def rightOrthonormal(A):
 
     return R, np.resize(A_R, (D,d,D))
 
-def entanglementSpectrum(aL, aR, l, r, truncate=0):
+def entanglementSpectrum(aL, aR, L, R, truncate=0):
     #aL and aR are left and right MPS tensors
     #l and r bring A in left or right form respectively
     #find Schmidt coefficients
@@ -239,41 +239,41 @@ def entanglementSpectrum(aL, aR, l, r, truncate=0):
     #apply truncation if desired
 
     #center matrix c is matrix multiplication of l and r
-    c = l @ r
+    C = L @ R
 
     #singular value decomposition
-    u,s,v = svd(c)
+    U,S,V = svd(C)
 
     #for well defined l and r, normalisation probably not necessary but just in case
-    s = s / s[0]
+    S = S / S[0]
 
     #apply a truncation step keep 'truncate' singular values
     if truncate:
-        s = s[:truncate]
-        u = u[:,:truncate]
-        v = v[:truncate,:]
+        S = S[:truncate]
+        U = U[:,:truncate]
+        V = V[:truncate,:]
 
         #transform aL and aR through unitary
-        aLU = np.einsum('ij,jkl->ikl', np.conj(u).T, aL)
-        aLU = np.einsum('ikl,lm->ikm', aLU, u)
-        aRV = np.einsum('ij,jkl->ikl', v, aR)
-        aRV = np.einsum('ikl,lm->ikm', aRV, np.conj(v).T)
+        aLU = np.einsum('ij,jkl->ikl', np.conj(U).T, aL)
+        aLU = np.einsum('ikl,lm->ikm', aLU, U)
+        aRV = np.einsum('ij,jkl->ikl', V, aR)
+        aRV = np.einsum('ikl,lm->ikm', aRV, np.conj(V).T)
 
         #calculate entropy through singular values
-        entropy = -np.sum(s ** 2 * np.log(s ** 2))
+        entropy = -np.sum(S ** 2 * np.log(S ** 2))
 
-        return aLU, aRV, s, entropy
+        return aLU, aRV, S, entropy
 
     #transform aL and aR through unitary
-    aLU = np.einsum('ij,jkl->ikl', np.conj(u).T, aL)
-    aLU = np.einsum('ikl,lm->ikm', aLU, u)
-    aRV = np.einsum('ij,jkl->ikl', v, aR)
-    aRV = np.einsum('ikl,lm->ikm', aRV, np.conj(v).T)
+    aLU = np.einsum('ij,jkl->ikl', np.conj(U).T, aL)
+    aLU = np.einsum('ikl,lm->ikm', aLU, U)
+    aRV = np.einsum('ij,jkl->ikl', V, aR)
+    aRV = np.einsum('ikl,lm->ikm', aRV, np.conj(V).T)
 
     # calculate entropy through singular values
-    entropy = -np.sum(s**2*np.log(s**2))
+    entropy = -np.sum(S**2*np.log(S**2))
 
-    return aLU, aRV, s, entropy
+    return aLU, aRV, S, entropy
 
 def CreateSx():
     out = np.zeros((3,3))
@@ -299,11 +299,11 @@ def Heisenberg(Jx,Jy,Jz,h):
     return -Jx*np.einsum('ij,kl->ijkl',Sx, Sx)-Jy*np.einsum('ij,kl->ijkl',Sy, Sy)-Jz*np.einsum('ij,kl->ijkl',Sz, Sz) \
             - h*np.einsum('ij,kl->ijkl',I,Sz) - h*np.einsum('ij,kl->ijkl',Sz,I)
             
-def ExpVal1(O, A, L, R):
+def ExpVal1(O, A, l, r):
     #determine expectation value of one-body operator in uniform gauge
     #first right contraction
-    righthalf =  np.einsum('isk,kl,jpl->ispj', A, R, np.conj(A))
-    temp = np.einsum('ij,ispj->sp', L, righthalf)
+    righthalf =  np.einsum('isk,kl,jpl->ispj', A, r, np.conj(A))
+    temp = np.einsum('ij,ispj->sp', l, righthalf)
     O_exp = np.einsum('sp, sp',temp, O)
     return O_exp
 
