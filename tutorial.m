@@ -4,7 +4,7 @@
 
 tol = 1e-12;
 
-D = 4;
+D = 12;
 d = 3;
 
 A = randcomplex(D, d, D); % MPS tensor
@@ -199,7 +199,7 @@ expv2_2 = ncon({AL, AC, conj(AL), conj(AC), O2}, {...
     [3 4 5],...
     [1 6 7],...
     [7 8 5],...
-    [2 4 6 8]}, [1 2 6 3 4 5 7 8]);
+    [2 4 6 8]}, [3 2 4 1 6 5 8 7]);
 checkExpv2 = ArrayIsEqual(expv2_1, expv2_2, tol);
 
 
@@ -252,7 +252,7 @@ Aopt = complex(reshape(Aopt(1:D^2*d), [D d D]), reshape(Aopt(D^2*d+1:end), [D d 
 % function definitions
 
 function E = CreateTransfer(A)
-    E = ncon({A, conj(A)}, {[-1 1 -3], [-2 1 -4]});
+    E = ncon({A, conj(A)}, {[-1 1 -2], [-3 1 -4]});
 end
 
 function [A, l, r] = NormalizeMPS(A)
@@ -334,7 +334,7 @@ function [AL, AR, AC, C] = MixedCanonical(A, tol)
     AC = AC / sqrt(nrm);
 end
 
-function expv = ExpvOneSiteUniform(l, r, A, O)
+function expv = ExpvOneSiteUniform(A, l, r, O)
     expv = ncon({l, r, A, conj(A), O}, {...
         [4 1],...
         [3 6],...
@@ -350,7 +350,7 @@ function expv = ExpvOneSiteMixed(AC, O)
         [2 4]}, [2 1 3 4]);
 end
 
-function expv = ExpvTwoSiteUniform(l, r, A, O)
+function expv = ExpvTwoSiteUniform(A, l, r, O)
     expv = ncon({l, r, A, A, conj(A), conj(A), O}, {...
         [6 1],...
         [5 10],...
@@ -367,7 +367,7 @@ function expv = ExpvTwoSiteMixed(AC, AL, O)
         [3 4 5],...
         [1 6 7],...
         [7 8 5],...
-        [2 4 6 8]}, [1 2 6 3 4 5 7 8]);
+        [2 4 6 8]}, [3 2 4 1 6 5 8 7]);
 end
 
 function g = EnergyGradient(A, l, r, Htilde)
@@ -418,11 +418,11 @@ function g = EnergyGradient(A, l, r, Htilde)
 end
 
 function [e, g] = EnergyDensity(A, H)
-    [A, l, r] = NormalizeMPS(A);
-    e = real(ExpvTwoSiteUniform(l, r, A, H)); % compute energy density of MPS (discard numerical imaginary artefact)
-    Htilde = H - e; % regularized energy density
-    % calculate gradient of energy density
-    g = EnergyGradient(A, l, r, Htilde);
+    d = size(A, 2);
+    [A, l, r] = NormalizeMPS(A); % normalize MPS
+    e = real(ExpvTwoSiteUniform(A, l, r, H)); % compute energy density of MPS (discard numerical imaginary artefact)
+    Htilde = H - e * ncon({eye(d), eye(d)}, {[-1 -3], [-2 -4]}); % regularized energy density
+    g = EnergyGradient(A, l, r, Htilde); % calculate gradient of energy density
 end
 
 function [e, g] = EnergyWrapper(varA, H, D, d)
