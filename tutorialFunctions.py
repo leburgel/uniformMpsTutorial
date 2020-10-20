@@ -297,3 +297,16 @@ def Heisenberg(Jx,Jy,Jz,h):
     I = np.identity(3)
     return -Jx*np.einsum('ij,kl->ijkl',Sx, Sx)-Jy*np.einsum('ij,kl->ijkl',Sy, Sy)-Jz*np.einsum('ij,kl->ijkl',Sz, Sz) \
             - h*np.einsum('ij,kl->ijkl',I,Sz) - h*np.einsum('ij,kl->ijkl',Sz,I)
+            
+def ExpVal(O, A, l, r):
+    #determine expectation value of one-body operator in uniform gauge
+    #first right contraction
+    righthalf =  np.einsum('isk,kl,jpl->ispj', A, r, np.conj(A))
+    temp = np.einsum('ij,ispj->sp', l, righthalf)
+    O_exp = np.einsum('sp, sp',temp, O)
+    return O_exp
+
+def ExpValue_mix(O, aC):
+    temp = np.einsum('isk,ipk-> sp', aC, np.conj(aC))
+    O_exp = np.einsum('sp, sp', temp, O)
+    return O_exp
