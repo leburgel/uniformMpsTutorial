@@ -147,11 +147,11 @@ def QRPositive(A):
     # that the diagonal elements of R are positive, R is upper triangular and
     # Q is an isometry with A = QR
     # returns (Q, R)
-
+    
     D = A.shape[1]
     # QR decomposition, scipy conventions: Q.shape = (D*d, D*d), R.shape = (D*d, D)
     Q, R = qr(A)
-
+    
     # Throw out zeros under diagonal: Q.shape = (D*d, D), R.shape = (D, D)
     Q = Q[:, :D]
     R = R[:D, :]
@@ -160,31 +160,31 @@ def QRPositive(A):
     diagSigns = np.diag(np.sign(np.diag(R)))
     Q = np.dot(Q, diagSigns)
     R = np.dot(diagSigns, R)
-
+    
     return Q, R
 
 def leftOrthonormal(A, tol=1e-14):
     # function that brings MPS A into left orthonormal gauge, such that
-    # L * A = A_L * L
+    # L  A = A_L  L
     # returns (L, A_L)
-
+    
     D = A.shape[0]
     d = A.shape[1]
-
+    
     # random guess for L
     L = np.random.rand(D,D)
     L = L / np.linalg.norm(L)
-
-
+    
+    
     # Decompose L*A until L converges (infinite loop if not convergent)
     convergence = 1
     while convergence > tol:
         LA = np.einsum('ik,ksj->isj', L, A)
         A_L, Lnew = QRPositive(np.resize(LA, (D*d, D)))
-
+        Lnew = Lnew / np.linalg.norm(Lnew) # only necessary when working with unnormalised MPS
         convergence = np.linalg.norm(Lnew - L)
         L = Lnew
-
+    
     return L, np.resize(A_L, (D,d,D))
 
 
@@ -225,6 +225,7 @@ def rightOrthonormal(A):
     while convergence > 1e-8:
         AR = np.einsum('ijk,kl->ijl', A, R)
         Rnew, A_R = RQPositive(np.resize(AR, (D, D*d)))
+        Rnew = Rnew / np.linalg.norm(Rnew) # only necessary when working with unnormalised MPS
         convergence = np.linalg.norm(Rnew-R)
         R = Rnew
 
@@ -298,15 +299,17 @@ def Heisenberg(Jx,Jy,Jz,h):
     return -Jx*np.einsum('ij,kl->ijkl',Sx, Sx)-Jy*np.einsum('ij,kl->ijkl',Sy, Sy)-Jz*np.einsum('ij,kl->ijkl',Sz, Sz) \
             - h*np.einsum('ij,kl->ijkl',I,Sz) - h*np.einsum('ij,kl->ijkl',Sz,I)
             
-def ExpVal(O, A, l, r):
+def ExpVal1(O, A, L, R):
     #determine expectation value of one-body operator in uniform gauge
     #first right contraction
-    righthalf =  np.einsum('isk,kl,jpl->ispj', A, r, np.conj(A))
-    temp = np.einsum('ij,ispj->sp', l, righthalf)
+    righthalf =  np.einsum('isk,kl,jpl->ispj', A, R, np.conj(A))
+    temp = np.einsum('ij,ispj->sp', L, righthalf)
     O_exp = np.einsum('sp, sp',temp, O)
     return O_exp
 
-def ExpValue_mix(O, aC):
+def ExpVal1_mix(O, aC):
+    #determine expectation value of one-body operator in mixed gauge
+    #first right contraction
     temp = np.einsum('isk,ipk-> sp', aC, np.conj(aC))
     O_exp = np.einsum('sp, sp', temp, O)
     return O_exp
