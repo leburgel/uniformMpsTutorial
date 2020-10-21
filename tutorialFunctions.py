@@ -333,6 +333,16 @@ def leftHandle_(A, r, l, v):
     v_rl = np.einsum('ji,ij,kl-> kl', v.reshape((D,D)), r, l)
     return v - v_T + np.reshape(v_rl, D**2)
 
+def rightHandle_(A, r, l, v):
+    # function that implements the action of 1-T + outer(r,l)
+    # on a left vector of dimension D**2 v (bottom - top)
+    # returns a vector of dimension D**2 (bottom - top)
+
+    D = r.shape[0]
+    v_T = rightHandle(A,v)
+    v_rl = np.einsum('kl,ji,ij-> kl', r, l, v.reshape((D,D)))
+    return v - v_T + np.reshape(v_rl, D**2)
+
 def Gradient(H, A, l, r):
     # a rank 3 tensor, equation (116) in the notes
     # consists of 4 terms
@@ -343,7 +353,30 @@ def Gradient(H, A, l, r):
 
     transfer_Left = LinearOperator((D**2,D**2), matvec=partial(leftHandle_, A, r, l))
     x = np.einsum('ijk,klm,jlqo,rqp,pon,ri->mn', A, A, H, np.conj(A), np.conj(A), l)
-    y = gmres(transfer_Left, x)
+    Lh = gmres(transfer_Left, x)
+    transfer_Right = LinearOperator((D**2,D**2), matvec=partial(rightHandle_, A, r, l))
+    x = np.einsum('ijk,klm,jlqo,rqp,pon,mn->ri', A, A, H, np.conj(A), np.conj(A), r)
+    Rh = gmres(transfer_Right, x)
+    
+    ###########
+    #FIRST TERM
+    ###########
+    first = np.einsum('ijk,klm,jlqo,pon,ri,mn->rqp', A, A, H, np.conj(A), l, r)
+    ###########
+    #SECOND TERM
+    ###########
+    second = np.einsum('ijk,klm,jlqo,rqp,ri,mn->pon', A, A, H, np.conj(A), l, r)
+
+    ###########
+    #THIRD TERM
+    ###########
+    third = np.einsum('mi,ijk,kl->mjl',l, A, Rh)
+
+    ###########
+    #FOURTH TERM
+    ###########
+    fourth = np.einsum('mi,ijk,kl->mjl',Lh, A, r)
+
     # define Lh and Rh
-    return y
+    return first+second+third+fourth
     
