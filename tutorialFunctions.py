@@ -24,16 +24,16 @@ def leftFixedPointNaive(A):
     # using diagonalisation of D^2 by D^2 matrix
     # returns (lam, rhoL)
     # lam is eigenvalue
-    # rhoL is eigenvector with 2 legs (bottom - top)
+    # rhoL is eigenvector with 2 legs (bottom - top)!!!!!
 
     T = createTransfer(A)
     D = A.shape[0]
 
     # eigs: k = amount of eigenvalues
-    #    which = 'LM' selects largest magnitude eigenvalues
+    # which = 'LM' selects largest magnitude eigenvalues
     lam, rhoL = eigs(np.resize(T, (D**2, D**2)).T, k=1, which='LM')
 
-    return lam, np.resize(rhoL, (D, D)).T # hier mogelijks nog transpose nodig !!
+    return lam, np.resize(rhoL, (D, D)).T
 
 def rightFixedPointNaive(A):
     # function to find fixed point of MPS transfer matrix, naive implementation
@@ -68,8 +68,8 @@ def normaliseFixedPoints(rhoL, rhoR):
 
     trace = np.einsum('ij,ji->', rhoL, rhoR)
     # trace = np.trace(rhoL*rhoR) # might work as well/be faster than einsum?
-
-    return rhoL, rhoR/trace
+    norm = np.sqrt(trace)
+    return rhoL/norm, rhoR/norm
 
 def matrixSqrt(M):
     # function that square roots the eigenvalues of M (have to be positive!)
@@ -313,3 +313,22 @@ def ExpVal1_mix(O, aC):
     temp = np.einsum('isk,ipk-> sp', aC, np.conj(aC))
     O_exp = np.einsum('sp, sp', temp, O)
     return O_exp
+
+def ExpVal2(H, A, LeftFixed, RightFixed):
+    #calculate the expectation value of the hamiltonian H (top left - top right - bottom left - bottom right)
+    #that acts on two sites
+    #contraction done from right to left
+    righthalf = np.einsum('isk,kl,jpl->ispj', A, RightFixed, np.conj(A))
+    temp = np.einsum('ispj,ahi,byj->ahspyb', righthalf, A, np.conj(A))
+    temp = np.einsum('ahspyb,ab->hspy', temp, LeftFixed)
+    e = np.einsum('hspy,hsyp',temp,H)
+    return e
+
+def ExpVal2Gauge(H, Ar,Ac):
+    #calculate the expectation value of the hamiltonian H (top left - top right - bottom left - bottom right)
+    #in mixed canonical form that acts on two sites, contraction done from right to left
+    #case where Ac on left legs of H
+    righthalf = np.einsum('isk,jpk->ispj', Ar, np.conj(Ar))
+    temp = np.einsum('ispj,ahi,ayj->hspy', righthalf, Ac, np.conj(Ac))
+    e = np.einsum('hspy,hsyp',temp,H)
+    return e
