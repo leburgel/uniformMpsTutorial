@@ -209,7 +209,7 @@ def RQPositive(A):
 
     return R, Q
 
-def rightOrthonormal(A):
+def rightOrthonormal(A, tol=1e-14):
     # function that brings MPS A into right orthonormal gauge, such that
     # A * R = R * A_R
     # returns (R, A_R)
@@ -222,7 +222,7 @@ def rightOrthonormal(A):
     convergence = 1
 
     # Decompose A*R until R converges
-    while convergence > 1e-8:
+    while convergence > tol:
         AR = np.einsum('ijk,kl->ijl', A, R)
         Rnew, A_R = RQPositive(np.resize(AR, (D, D*d)))
         Rnew = Rnew / np.linalg.norm(Rnew) # only necessary when working with unnormalised MPS
