@@ -3,6 +3,7 @@ from scipy.linalg import rq
 from scipy.linalg import qr
 from scipy.linalg import svd
 from scipy.sparse.linalg import eigs, LinearOperator, gmres
+from scipy.optimize import minimize
 from functools import partial
 
 def createMPS(bondDimension, physDimension):
@@ -380,3 +381,46 @@ def Gradient(H, A, l, r):
     # define Lh and Rh
     return first+second+third+fourth
     
+def energyDensity(A, H):
+    d = A.shape[1]
+    A, _ = normaliseMPS(A)
+    _, l = leftFixedPoint(A)
+    _, r = rightFixedPoint(A)
+    e = np.real(twoSiteUniform(H, A, l, r))
+    eOp = e * np.einsum("ik,jl->ijkl", np.identity(d), np.identity(d))
+    Htilde = H - eOp
+    g = Gradient(Htilde, A, l, r)
+    return e, g
+
+def energyWrapper(varA, H, D, d):
+    Areal = (varA[:D^2*d]).reshape(D, d, D)
+    Acomplex = (varA[D^2*d:]).reshape(D, d, D)
+    A = Areal + 1j*Acomplex
+    e, _ = energyDensity(A, H)
+    return e
+
+#hier wel nog wat werk denk ik
+def gradientWrapper(varA, H, D, d):
+    _, g = energyDensity(A, H)
+    #extra haakjes om real(g) en imag(g) in tuple te plaatsen voor concate anders error !!!
+    g = np.concatenate((np.real(g).reshape(-1), np.imag(g).reshape(-1)))
+    return g
+
+### A first test case for the gradient in python
+D = 12
+d = 3
+
+H = Heisenberg(-1,-1,-1,0)
+
+A = createMPS(D,d)
+ReA = np.real(A)
+ImA = np.imag(A)
+
+#extra haakjes om real(g) en imag(g) in tuple te plaatsen voor concate anders error !!!
+varA = np.concatenate((ReA.reshape(-1), ImA.reshape(-1)))
+
+EnergyHandle = partial(energyWrapper, H, D, d)
+gradientHandle = partial(gradientWrapper, H, D, d)
+
+res = minimize(EnergyHandle, varA, jac=gradientHandle)
+Aopt = res.x
