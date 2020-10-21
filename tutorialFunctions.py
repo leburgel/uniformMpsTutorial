@@ -2,8 +2,7 @@ import numpy as np
 from scipy.linalg import rq
 from scipy.linalg import qr
 from scipy.linalg import svd
-from scipy.sparse.linalg import eigs
-from scipy.sparse.linalg import LinearOperator
+from scipy.sparse.linalg import eigs, LinearOperator, gmres
 from functools import partial
 
 def createMPS(bondDimension, physDimension):
@@ -323,3 +322,30 @@ def twoSiteMixed(H, Ac, Ar):
     #case where Ac on left legs of H
     # kjlipmno
     return np.einsum('ijk,klm,jlpn,ipo,onm', Ac, Ar, H, np.conj(Ac), np.conj(Ar))
+
+def leftHandle_(A, r, l, v):
+    # function that implements the action of 1-T + outer(r,l)
+    # on a left vector of dimension D**2 v (bottom - top)
+    # returns a vector of dimension D**2 (bottom - top)
+
+    D = r.shape[0]
+    v_T = leftHandle(A,v)
+    v_rl = np.einsum('ji,ij,kl-> kl', v.reshape((D,D)), r, l)
+    return v - v_T + np.reshape(v_rl, D**2)
+
+def Gradient(H, A, l, r):
+    # a rank 3 tensor, equation (116) in the notes
+    # consists of 4 terms
+    # have to solve x = y(1-T_) where T_ = createTransfer(A) - np.outer(leftFixedPoint(A), rightFixedPoint(A))
+    # don't naively construct (1-T_) because all these objects have 4D legs. As before describe how this operator works on a vector y
+    # create function handle instead of D**2 matrix
+    D = A.shape[0]
+
+    transfer_Left = LinearOperator( (D**2,D**2), matvec=partial(leftHandle_, A, r, l))
+    x = 5
+    # eigs: k = amount of eigenvalues
+    #    which = 'LM' selects largest magnitude eigenvalues
+    y = gmres(transfer_Left, x, k=1, which='LM')
+    # define Lh and Rh
+    return 'piep'
+    
