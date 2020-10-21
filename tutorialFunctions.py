@@ -299,36 +299,27 @@ def Heisenberg(Jx,Jy,Jz,h):
     return -Jx*np.einsum('ij,kl->ijkl',Sx, Sx)-Jy*np.einsum('ij,kl->ijkl',Sy, Sy)-Jz*np.einsum('ij,kl->ijkl',Sz, Sz) \
             - h*np.einsum('ij,kl->ijkl',I,Sz) - h*np.einsum('ij,kl->ijkl',Sz,I)
             
-def ExpVal1(O, A, l, r):
+def oneSiteUniform(O, A, l, r):
     #determine expectation value of one-body operator in uniform gauge
     #first right contraction
-    righthalf =  np.einsum('isk,kl,jpl->ispj', A, r, np.conj(A))
-    temp = np.einsum('ij,ispj->sp', l, righthalf)
-    O_exp = np.einsum('sp, sp',temp, O)
-    return O_exp
+    return np.einsum('ijk,mnl,mi,kl,jn', A, np.conj(A), l, r, O)
 
-def ExpVal1_mix(O, aC):
+def oneSiteMixed(O, Ac):
     #determine expectation value of one-body operator in mixed gauge
     #first right contraction
-    temp = np.einsum('isk,ipk-> sp', aC, np.conj(aC))
-    O_exp = np.einsum('sp, sp', temp, O)
-    return O_exp
+    # ikjl is juiste sequence
 
-def ExpVal2(H, A, LeftFixed, RightFixed):
+    return np.einsum('ijk,jl,ilk', Ac, O, np.conj(Ac))
+
+def twoSiteUniform(H, A, l, r):
     #calculate the expectation value of the hamiltonian H (top left - top right - bottom left - bottom right)
     #that acts on two sites
     #contraction done from right to left
-    righthalf = np.einsum('isk,kl,jpl->ispj', A, RightFixed, np.conj(A))
-    temp = np.einsum('ispj,ahi,byj->ahspyb', righthalf, A, np.conj(A))
-    temp = np.einsum('ahspyb,ab->hspy', temp, LeftFixed)
-    e = np.einsum('hspy,hsyp',temp,H)
-    return e
+    return np.einsum('ijk,klm,jlqo,rqp,pon,ri,mn', A, A, H, np.conj(A), np.conj(A), l, r)
 
-def ExpVal2Gauge(H, Ar,Ac):
+def twoSiteMixed(H, Ar,Ac):
     #calculate the expectation value of the hamiltonian H (top left - top right - bottom left - bottom right)
     #in mixed canonical form that acts on two sites, contraction done from right to left
     #case where Ac on left legs of H
-    righthalf = np.einsum('isk,jpk->ispj', Ar, np.conj(Ar))
-    temp = np.einsum('ispj,ahi,ayj->hspy', righthalf, Ac, np.conj(Ac))
-    e = np.einsum('hspy,hsyp',temp,H)
-    return e
+    # kjlipmno
+    return np.einsum('ijk,klm,jlpn,ipo,onm', Ac, Ar, H, np.conj(Ac), np.conj(Ar))
