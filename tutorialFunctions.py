@@ -341,11 +341,9 @@ def Gradient(H, A, l, r):
     # create function handle instead of D**2 matrix
     D = A.shape[0]
 
-    transfer_Left = LinearOperator( (D**2,D**2), matvec=partial(leftHandle_, A, r, l))
-    x = 5
-    # eigs: k = amount of eigenvalues
-    #    which = 'LM' selects largest magnitude eigenvalues
-    y = gmres(transfer_Left, x, k=1, which='LM')
+    transfer_Left = LinearOperator((D**2,D**2), matvec=partial(leftHandle_, A, r, l))
+    x = np.einsum('ijk,klm,jlqo,rqp,pon,ri->mn', A, A, H, np.conj(A), np.conj(A), l)
+    y = gmres(transfer_Left, x)
     # define Lh and Rh
-    return 'piep'
+    return y
     
