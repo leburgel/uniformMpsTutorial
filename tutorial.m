@@ -242,7 +242,7 @@ Aopt = complex(reshape(Aopt(1:D^2*d), [D d D]), reshape(Aopt(D^2*d+1:end), [D d 
 [Aopt, l, r] = NormalizeMPS(Aopt);
 ArrayIsEqual(e, ExpvTwoSiteUniform(Aopt, l, r, h), tol) % just to be extra sure...
 
-% gradient descent and fminunc seem to be working now, but sometimes convergence criteria are too strict for fminunc I guess
+% gradient descent and fminunc seem to be working now, but sometimes convergence criteria are too strict for fminunc so it just quits at some point
 
 %% Variational optimization of spin-1 Heisenberg Hamiltonian with VUMPS
 % tolerance for VUMPS algorithm
@@ -262,12 +262,16 @@ while flag
     Rh = RightEnvMixed(AR, C, htilde, delta);
     Lh = LeftEnvMixed(AL, C, htilde, delta);
     [ACprime, Cprime] = CalculateNewCenter(AL, AR, AC, C, Rh, Lh, htilde, delta);
-    [AL, AR, AC, C] = MinAcC(ACprime, Cprime);
-    delta = ArrayNorm(H_AC(AC, AL, AR, Rh, Lh, htilde) - ncon({AL, H_C(C, AL, AR, Rh, Lh, htilde)}, {[-1 -2 1], [1 -3]})); % calculate error using new or old AL, AR, Rh, Lh???
+    [ALprime, ARprime, ACprime, Cprime] = MinAcC(ACprime, Cprime);
+    delta = ArrayNorm(H_AC(AC, AL, AR, Rh, Lh, htilde) - ncon({AL, H_C(C, AL, AR, Rh, Lh, htilde)}, {[-1 -2 1], [1 -3]})); % calculate error using new or old AL, AR, Rh, Lh? now using old...
+    AL = ALprime; AR = ARprime; AC = ACprime; C = Cprime; % update
     if delta < tol
         flag = false;
     end 
 end
+
+% converging and finding correct energy for antiferromagnet
+% convergence seems a bit slow, why?
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
