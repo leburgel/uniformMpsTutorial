@@ -317,7 +317,7 @@ def twoSiteUniform(H, A, l, r):
     #contraction done from right to left
     return np.einsum('ijk,klm,jlqo,rqp,pon,ri,mn', A, A, H, np.conj(A), np.conj(A), l, r)
 
-def twoSiteMixed(H, Ar,Ac):
+def twoSiteMixed(H, Ac, Ar):
     #calculate the expectation value of the hamiltonian H (top left - top right - bottom left - bottom right)
     #in mixed canonical form that acts on two sites, contraction done from right to left
     #case where Ac on left legs of H
