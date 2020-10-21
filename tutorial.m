@@ -44,6 +44,8 @@ E = ncon({A, conj(A)}, {[-1 1 -3], [-2 1 -4]});
 tr = ncon({l, r},{[1 2], [2 1]});
 l = l / sqrt(tr); r = r / sqrt(tr);
 
+% TODO: explicitly make left and right points hermititian!
+
 % checks to see if this is right: ok
 checkr = ArrayIsEqual(r, ncon({E, r}, {[-1 -2 1 2], [1 2]}), tol);
 checkl = ArrayIsEqual(l, ncon({l, E}, {[1 2], [2 1 -2 -1]}), tol);
@@ -65,6 +67,8 @@ checkR1 = ArrayIsEqual(eye(D), ncon({AR1, conj(AR1)}, {[-1 1 2], [-2 1 2]}), 1e-
 
 
 % second option: through iterative QR decompositions; more accurate option
+
+% left orthonormalization -> implemented in function LeftOrthonormalize
 L = randcomplex(D, D); % initialize random matrix
 L = L / ArrayNorm(L); % normalize
 flag = true;
@@ -80,7 +84,8 @@ end
 L2 = Lprime;
 AL2 = reshape(AL2, [D d D]);
 
-R = randcomplex(D, D);
+% right orthonormalization -> implemented in function RightOrthonormalize
+R = randcomplex(D, D); % initialize random matrix
 R = R / ArrayNorm(R); % normalize
 flag = true;
 while flag
@@ -102,8 +107,6 @@ checkR2_extra = ArrayIsEqual(AR2, ncon({inv(R2), A, R2}, {[-1 1], [1 -2 2], [2, 
 
 % didn't do the hybrid method using an extra Arnoldi solver step from lecture notes, is this necessary?
 
-% could also directly go to mixed gauge by using AL in the right orthonormalization procedure...
-
 % why would we need the lambda from algorithm 1 box in the lecture notes? Isn't this just always going to be one if the procedure converges?
 
 % use one result for the remainder
@@ -121,13 +124,14 @@ checktr2 = ArrayIsEqual(1, ncon({l2, r2},{[1 2], [2 1]}), tol);
 
 %% Go to mixed gauge
 
+% -> implemented in function MixedCanonical (but without truncation)
 C = L * R;
 checkC1 = ArrayIsEqual(ncon({AL, C}, {[-1 -2 1], [1 -3]}), ncon({C, AR}, {[-1 1], [1 -2 -3]}), tol); % check property (16) of the C-matrix
 
 % diagonalize C using SVD
 [U, C, V] = svd(C);
 
-%% Apply truncation if desired, default no truncation, t = 0
+% apply truncation if desired, default no truncation, t = 0
 t = 0;
 if t
     % if t > 0, keep t highest values in C and their according unitaries U and V
@@ -160,6 +164,7 @@ end
 % renormalize MPS in mixed gauge (is it normal that this is necessary?)
 nrm = ncon({AC, conj(AC)}, {[1 2 3], [1 2 3]});
 AC = AC/sqrt(nrm);
+
 
 
 %% Expectation values of single- and two-site operators
@@ -203,52 +208,85 @@ expv2_2 = ncon({AL, AC, conj(AL), conj(AC), O2}, {...
 checkExpv2 = ArrayIsEqual(expv2_1, expv2_2, tol);
 
 
+<<<<<<< HEAD
 %% Variational optimization of two-site Heisenberg interaction through naive gradient descent
 
 % spin-1 angular momentum operators
 Sx = [0 1 0; 1 0 1; 0 1 0]/ sqrt(2);
 Sy = [0 -1 0; 1 0 -1; 0 1 0] * 1i/sqrt(2);
 Sz = [1 0 0; 0 0 0; 0 0 -1];
+=======
+%% Variational optimization of spin-1 Heisenberg Hamiltonian with gradient descent in uniform gauge
+>>>>>>> 7eb2d10b6c82640348f644b613c10d460b10c598
 
 % coupling strengths
-Jx = 1; Jy = 1; Jz = 1; h = 0;
-
+Jx = -1; Jy = -1; Jz = -1; hz = 0; % Heisenberg antiferromagnet
 % Heisenberg Hamiltonian
-H = -Jx*ncon({Sx, Sx}, {[-1 -3], [-2 -4]}) - Jy*ncon({Sy, Sy}, {[-1 -3], [-2 -4]}) - Jz*ncon({Sz, Sz}, {[-1 -3], [-2 -4]})...
-        - h*ncon({Sz, eye(3)}, {[-1 -3], [-2 -4]}) - h*ncon({eye(3), eye(3)}, {[-1 -3], [-2 -4]});
-  
-% most naive approach: converges to same energy as fminunc (but never quite gets there...)
-A = randcomplex(D, d, D);
-tl = 1e-4;
-epsilon = 0.045;
-flag = true;
-while flag
-    [e, g] = EnergyDensity(A, H);
-    e
-    Aprime = A - epsilon * g;
-    if ArrayIsEqual(A, Aprime, tl)
-        flag = false;
-    else
-        A = Aprime;
-    end
-end
+h = HeisenbergHamiltonian(Jx, Jy, Jz, hz);
+
+% % most naive approach: converges to same energy as fminunc
+% A = randcomplex(D, d, D);
+% tl = 1e-4;
+% epsilon = 0.1;
+% flag = true;
+% while flag
+%     [e, g] = EnergyDensity(A, h);
+%     e
+%     Aprime = A - epsilon * g;
+%     if ArrayIsEqual(A, Aprime, tl)
+%         flag = false;
+%     else
+%         A = Aprime;
+%     end
+% end
 
 % running now, converges to the same energy every time
 ReA = rand(D, d, D);
 ImA = rand(D, d, D);
 varA = [reshape(ReA, [], 1); reshape(ImA, [], 1)];
-EnergyHandle = @(varA) EnergyWrapper(varA, H, D, d);
+EnergyHandle = @(varA) EnergyWrapper(varA, h, D, d);
 options = optimoptions('fminunc', 'SpecifyObjectiveGradient', true);
 [Aopt, e] = fminunc(EnergyHandle, varA, options);
 Aopt = complex(reshape(Aopt(1:D^2*d), [D d D]), reshape(Aopt(D^2*d+1:end), [D d D]));
+[Aopt, l, r] = NormalizeMPS(Aopt);
+ArrayIsEqual(e, ExpvTwoSiteUniform(Aopt, l, r, h), tol) % just to be extra sure...
 
-% so no succes so far!
+% gradient descent and fminunc seem to be working now, but sometimes convergence criteria are too strict for fminunc so it just quits at some point
 
-% in optimization procedure, have to normalize MPS tensor at each step? yes, I think
+%% Variational optimization of spin-1 Heisenberg Hamiltonian with VUMPS
+% tolerance for VUMPS algorithm
+tol = 1e-4;
+% coupling strengths
+Jx = -1; Jy = -1; Jz = -1; hz = 0;
+% Heisenberg Hamiltonian
+h = HeisenbergHamiltonian(Jx, Jy, Jz, hz); % Heisenberg antiferromagnet
+
+A = randcomplex(D, d, D); % initialize random MPS tensor
+[AL, AR, AC, C] = MixedCanonical(A); % go to mixed gauge
+flag = true;
+delta = 1e-4;
+while flag
+    e = real(ExpvTwoSiteMixed(AC, AL, h)); % current energy density
+    htilde = h - e * ncon({eye(d), eye(d)}, {[-1 -3], [-2 -4]}); % regularized energy density
+    Rh = RightEnvMixed(AR, C, htilde, delta);
+    Lh = LeftEnvMixed(AL, C, htilde, delta);
+    [ACprime, Cprime] = CalculateNewCenter(AL, AR, AC, C, Rh, Lh, htilde, delta);
+    [ALprime, ARprime, ACprime, Cprime] = MinAcC(ACprime, Cprime);
+    delta = ArrayNorm(H_AC(AC, AL, AR, Rh, Lh, htilde) - ncon({AL, H_C(C, AL, AR, Rh, Lh, htilde)}, {[-1 -2 1], [1 -3]})); % calculate error using new or old AL, AR, Rh, Lh? now using old...
+    AL = ALprime; AR = ARprime; AC = ACprime; C = Cprime; % update
+    if delta < tol
+        flag = false;
+    end 
+end
+
+% converging and finding correct energy for antiferromagnet
+% convergence seems a bit slow, why?
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-% function definitions
+%% function definitions
+
+%% normalizing/gauging MPS
 
 function E = CreateTransfer(A)
     E = ncon({A, conj(A)}, {[-1 1 -2], [-3 1 -4]});
@@ -320,6 +358,9 @@ function [AR, R, lambda] = RightOrthonormalize(A, R0, tol)
 end
 
 function [AL, AR, AC, C] = MixedCanonical(A, tol)
+    if nargin < 2
+        tol = 1e-12;
+    end
     D = size(A, 1);
     R0 = randcomplex(D, D); L0 = randcomplex(D, D); % initialize random matrices
     [AL, L, ~] = LeftOrthonormalize(A, L0, tol);
@@ -332,6 +373,8 @@ function [AL, AR, AC, C] = MixedCanonical(A, tol)
     nrm = ncon({AC, conj(AC)}, {[1 2 3], [1 2 3]});
     AC = AC / sqrt(nrm);
 end
+
+%% expectation values of on- and two-site operators in uniform and mixed gauge
 
 function expv = ExpvOneSiteUniform(A, l, r, O)
     expv = ncon({l, r, A, conj(A), O}, {...
@@ -369,17 +412,31 @@ function expv = ExpvTwoSiteMixed(AC, AL, O)
         [2 4 6 8]}, [3 2 4 1 6 5 8 7]);
 end
 
-function g = EnergyGradient(A, l, r, Htilde)
+%% spin-1 Heisenberg Hamiltonian
+
+function h = HeisenbergHamiltonian(Jx, Jy, Jz, hz)
+    % spin-1 angular momentum operators
+    Sx = [0 1 0; 1 0 1; 0 1 0] / sqrt(2);
+    Sy = [0 -1 0; 1 0 -1; 0 1 0] * 1i / sqrt(2);
+    Sz = [1 0 0; 0 0 0; 0 0 -1];
+    % Heisenberg Hamiltonian
+    h = -Jx*ncon({Sx, Sx}, {[-1 -3], [-2 -4]}) - Jy*ncon({Sy, Sy}, {[-1 -3], [-2 -4]}) - Jz*ncon({Sz, Sz}, {[-1 -3], [-2 -4]})...
+            - hz*ncon({Sz, eye(3)}, {[-1 -3], [-2 -4]}) - hz*ncon({eye(3), eye(3)}, {[-1 -3], [-2 -4]});
+end
+
+%% MPS optimization in uniform gauge using gradient descent
+
+function g = EnergyGradient(A, l, r, htilde)
     D = size(A, 1);
     % center terms first; easy ones
-    centerTerm1 = ncon({l, r, A, A, conj(A), Htilde}, {...
+    centerTerm1 = ncon({l, r, A, A, conj(A), htilde}, {...
         [6 1],...
         [5 -3],...
         [1 3 2],...
         [2 4 5],...
         [6 7 -1],...
         [3 4 7 -2]});
-    centerTerm2 = ncon({l, r, A, A, conj(A), Htilde}, {...
+    centerTerm2 = ncon({l, r, A, A, conj(A), htilde}, {...
         [-1 1],...
         [5 7],...
         [1 3 2],...
@@ -388,44 +445,155 @@ function g = EnergyGradient(A, l, r, Htilde)
         [3 4 -2 6]});
     
     % left environment
-    xL =  ncon({l, A, A, conj(A), conj(A), Htilde}, {...
+    xL =  ncon({l, A, A, conj(A), conj(A), htilde}, {...
         [5 1],...
         [1 3 2],...
         [2 4 -2],...
         [5 6 7],...
         [7 8 -1],...
         [3 4 6 8]});
-    rshp = @(v) reshape(v, [D D]);
-    handleL = @(v) reshape(rshp(v) - ncon({rshp(v), A, conj(A)}, {[3 1], [1 2 -2], [3 2 -1]}) + trace(rshp(v)*r) * l, [], 1);
-    yL = rshp(gmres(handleL, reshape(xL, [], 1)));
-    leftEnv = ncon({yL, A, r}, {[-1 1], [1 -2 2], [2 -3]});
+    handleL = @(v) reshape(reshape(v, [D D]) - ncon({reshape(v, [D D]), A, conj(A)}, {[3 1], [1 2 -2], [3 2 -1]}) + trace(reshape(v, [D D])*r) * l, [], 1);
+    Lh = reshape(gmres(handleL, reshape(xL, [], 1)), [D D]);
+    leftEnvTerm = ncon({Lh, A, r}, {[-1 1], [1 -2 2], [2 -3]});
     
     % right environment
-    xR =  ncon({r, A, A, conj(A), conj(A), Htilde}, {...
+    xR =  ncon({r, A, A, conj(A), conj(A), htilde}, {...
         [4 5],...
         [-1 2 1],...
         [1 3 4],...
         [-2 8 7],...
         [7 6 5],...
         [2 3 8 6]});
-    handleR = @(v) reshape(rshp(v) - ncon({rshp(v), A, conj(A)}, {[1 3], [-1 2 1], [-2 2 3]}) + trace(l*rshp(v)) * r, [], 1);
-    yR = rshp(gmres(handleR, reshape(xR, [], 1)));
-    rightEnv = ncon({yR, A, l}, {[1 -3], [2 -2 1], [-1 2]});
+    handleR = @(v) reshape(reshape(v, [D D]) - ncon({reshape(v, [D D]), A, conj(A)}, {[1 3], [-1 2 1], [-2 2 3]}) + trace(l*reshape(v, [D D])) * r, [], 1);
+    Rh = reshape(gmres(handleR, reshape(xR, [], 1)), [D D]);
+    rightEnvTerm = ncon({Rh, A, l}, {[1 -3], [2 -2 1], [-1 2]});
     
-    % construct gradient
-    g = centerTerm1 + centerTerm2 + leftEnv + rightEnv;
+    % construct gradient out of these 4 terms
+    g = 2 * (centerTerm1 + centerTerm2 + leftEnvTerm + rightEnvTerm);
 end
 
-function [e, g] = EnergyDensity(A, H)
+function [e, g] = EnergyDensity(A, h)
     d = size(A, 2);
     [A, l, r] = NormalizeMPS(A); % normalize MPS
-    e = real(ExpvTwoSiteUniform(A, l, r, H)); % compute energy density of MPS (discard numerical imaginary artefact)
-    Htilde = H - e * ncon({eye(d), eye(d)}, {[-1 -3], [-2 -4]}); % regularized energy density
-    g = EnergyGradient(A, l, r, Htilde); % calculate gradient of energy density
+    e = real(ExpvTwoSiteUniform(A, l, r, h)); % compute energy density of MPS (discard numerical imaginary artefact)
+    htilde = h - e * ncon({eye(d), eye(d)}, {[-1 -3], [-2 -4]}); % regularized energy density
+    g = EnergyGradient(A, l, r, htilde); % calculate gradient of energy density
 end
 
-function [e, g] = EnergyWrapper(varA, H, D, d)
+function [e, g] = EnergyWrapper(varA, h, D, d)
+    % just wrapper around the EnergyDensity function that takes MPS tensor as a vector and returns the gradient as a vector
     A = complex(reshape(varA(1:D^2*d), [D d D]), reshape(varA(D^2*d+1:end), [D d D]));
-    [e, g] = EnergyDensity(A, H);
+    [e, g] = EnergyDensity(A, h);
     g = [reshape(real(g), [], 1); reshape(imag(g), [], 1)];
 end
+
+%% VUMPS algorithm for spin-1 chain
+
+function Rh = RightEnvMixed(AR, C, htilde, delta)
+    D = size(AR, 1);
+    xR =  ncon({AR, AR, conj(AR), conj(AR), htilde}, {...
+        [-1 2 1],...
+        [1 3 4],...
+        [-2 7 6],...
+        [6 5 4],...
+        [2 3 7 5]});
+    % for regularizing right transfer matrix: left fixed point is C'*C
+    handleR = @(v) reshape(reshape(v, [D D]) - ncon({reshape(v, [D D]), AR, conj(AR)}, {[1 3], [-1 2 1], [-2 2 3]}) + trace((C'*C)*reshape(v, [D D])) * eye(D), [], 1);
+%     Rh = reshape(gmres(handleR, reshape(xR, [], 1)), [D D]); % fixed tolerance
+    Rh = reshape(gmres(handleR, reshape(xR, [], 1), [], delta/10), [D D]); % variable tolerance
+end
+
+function Lh = LeftEnvMixed(AL, C, htilde, delta)
+    D = size(AL, 1);
+    xL =  ncon({AL, AL, conj(AL), conj(AL), htilde}, {...
+        [4 2 1],...
+        [1 3 -2],...
+        [4 5 6],...
+        [6 7 -1],...
+        [2 3 5 7]});
+    % for regularizing right left matrix: right fixed point is C*C'
+    handleL = @(v) reshape(reshape(v, [D D]) - ncon({reshape(v, [D D]), AL, conj(AL)}, {[3 1], [1 2 -2], [3 2 -1]}) + trace(reshape(v, [D D])*(C*C')) * eye(D), [], 1);
+%     Lh = reshape(gmres(handleL, reshape(xL, [], 1)), [D D]); % fixed tolerance
+    Lh = reshape(gmres(handleL, reshape(xL, [], 1), [], delta/10), [D D]); % variable tolerance
+end
+
+function vprime = H_AC(v, AL, AR, Rh, Lh, htilde)
+    % map in equation (131) in the lecture notes, acting on some three-legged tensor 'v'
+    centerTerm1 = ncon({AL, v, conj(AL), htilde}, {...
+        [4 2 1],...
+        [1 3 -3],...
+        [4 5 -1],...
+        [2 3 5 -2]});
+    
+    centerTerm2 = ncon({v, AR, conj(AR), htilde}, {...
+        [-1 2 1],...
+        [1 3 4],...
+        [-3 5 4],...
+        [2 3 -2 5]});
+    
+    leftEnvTerm = ncon({Lh, v}, {[-1 1], [1 -2 -3]});
+    
+    rightEnvTerm = ncon({v, Rh}, {[-1 -2 1], [1 -3]});
+    
+    vprime = centerTerm1 + centerTerm2 + leftEnvTerm + rightEnvTerm;
+end
+
+function vprime = H_C(v, AL, AR, Rh, Lh, htilde)
+    % map in equation (132) in the lecture notes, acting on some two-legged tensor 'v'
+    centerTerm = ncon({AL, v, AR, conj(AL), conj(AR), htilde}, {...
+        [5 3 1],...
+        [1 2],...
+        [2 4 7],...
+        [5 6 -1],...
+        [-2 8 7],...
+        [3 4 6 8]});
+    
+    leftEnvTerm = Lh * v;
+    
+    rightEnvTerm = v * Rh;
+    
+    vprime = centerTerm + leftEnvTerm + rightEnvTerm;
+end
+
+function [ACprime, Cprime] = CalculateNewCenter(AL, AR, AC, C, Lh, Rh, htilde, delta)
+    D = size(AL, 1); d = size(AL, 2);
+    % compute action of maps (131) and (132) in the notes and pour this into function handle for eigs
+    handleAC = @(v) reshape(H_AC(reshape(v, [D d D]), AL, AR, Rh, Lh, htilde), [], 1);
+    handleC = @(v) reshape(H_C(reshape(v, [D D]), AL, AR, Rh, Lh, htilde), [], 1);
+    % solve eigenvalue problem using 'smallest real' option
+%     [ACprime, ~] = eigs(handleAC, D^2*d, 1, 'smallestreal', 'StartVector', reshape(AC, [], 1)); % fixed tolerance
+%     ACprime = reshape(ACprime, [D d D]);
+%     [Cprime, ~] = eigs(handleC, D^2, 1, 'smallestreal', 'StartVector', reshape(C, [], 1)); % fixed tolerance
+%     Cprime = reshape(Cprime, [D D]);
+    [ACprime, ~] = eigs(handleAC, D^2*d, 1, 'smallestreal', 'Tolerance', delta/10, 'StartVector', reshape(AC, [], 1)); % variable tolerance
+    ACprime = reshape(ACprime, [D d D]);
+    [Cprime, ~] = eigs(handleC, D^2, 1, 'smallestreal', 'Tolerance', delta/10, 'StartVector', reshape(C, [], 1)); % variable tolerance
+    Cprime = reshape(Cprime, [D D]);
+end
+
+function [AL, AR, AC, C] = MinAcC(ACprime, Cprime)
+    % algorithm 5 from lecture notes, but adapted so that AR and AL are related properly for regularization of left and right transfer matrix
+    D = size(ACprime, 1); d = size(ACprime, 2);
+    % left polar decomositions
+    [UlAC, ~] = poldec(reshape(ACprime, [D*d, D]));
+    [UlC, ~] = poldec(Cprime);
+    AL = reshape(UlAC*UlC', [D d D]);
+    % right polar decomositions
+    [UrAC, ~] = poldec(reshape(ACprime, [D, D*d]).');    UrAC = UrAC.';
+    [UrC, ~] = poldec(Cprime.');    UrC = UrC.';
+    AR = reshape(UrC'*UrAC, [D d D]);
+%     % alternative from Bram: compute new AR through rightOrthonormalize on new AL -> VUMPS converges regardless of whether we do it this way or with right polar decomp
+%     [AR, ~, ~] = RightOrthonormalize(AL);
+    % new AC and C were just given
+    AC = ACprime;
+    C = Cprime;
+%     % do we need to diagonalize C using the SVD thing again? -> VUMPS doesn't converge if we do this, probably because it messes with AC
+%     [U, C, V] = svd(Cprime);
+%     AL = ncon({U', AL, U}, {[-1 1], [1 -2 2], [2 -3]});
+%     AR = ncon({V', AR, V}, {[-1 1], [1 -2 2], [2 -3]});
+%     AC = ncon({AL, C}, {[-1 -2 1], [1 -3]});
+    % normalize for mixed gauge -> doesn't seem to be necessary here, why??
+    nrm = ncon({AC, conj(AC)}, {[1 2 3], [1 2 3]});
+    AC = AC / sqrt(nrm);
+end
+

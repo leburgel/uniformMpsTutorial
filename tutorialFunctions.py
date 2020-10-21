@@ -2,8 +2,7 @@ import numpy as np
 from scipy.linalg import rq
 from scipy.linalg import qr
 from scipy.linalg import svd
-from scipy.sparse.linalg import eigs
-from scipy.sparse.linalg import LinearOperator
+from scipy.sparse.linalg import eigs, LinearOperator, gmres
 from functools import partial
 
 def createMPS(bondDimension, physDimension):
@@ -24,16 +23,16 @@ def leftFixedPointNaive(A):
     # using diagonalisation of D^2 by D^2 matrix
     # returns (lam, rhoL)
     # lam is eigenvalue
-    # rhoL is eigenvector with 2 legs (bottom - top)
+    # rhoL is eigenvector with 2 legs (bottom - top)!!!!!
 
     T = createTransfer(A)
     D = A.shape[0]
 
     # eigs: k = amount of eigenvalues
-    #    which = 'LM' selects largest magnitude eigenvalues
+    # which = 'LM' selects largest magnitude eigenvalues
     lam, rhoL = eigs(np.resize(T, (D**2, D**2)).T, k=1, which='LM')
 
-    return lam, np.resize(rhoL, (D, D)).T # hier mogelijks nog transpose nodig !!
+    return lam, np.resize(rhoL, (D, D)).T
 
 def rightFixedPointNaive(A):
     # function to find fixed point of MPS transfer matrix, naive implementation
@@ -68,8 +67,8 @@ def normaliseFixedPoints(rhoL, rhoR):
 
     trace = np.einsum('ij,ji->', rhoL, rhoR)
     # trace = np.trace(rhoL*rhoR) # might work as well/be faster than einsum?
-
-    return rhoL, rhoR/trace
+    norm = np.sqrt(trace)
+    return rhoL/norm, rhoR/norm
 
 def matrixSqrt(M):
     # function that square roots the eigenvalues of M (have to be positive!)
@@ -209,7 +208,7 @@ def RQPositive(A):
 
     return R, Q
 
-def rightOrthonormal(A):
+def rightOrthonormal(A, tol=1e-14):
     # function that brings MPS A into right orthonormal gauge, such that
     # A * R = R * A_R
     # returns (R, A_R)
@@ -222,7 +221,7 @@ def rightOrthonormal(A):
     convergence = 1
 
     # Decompose A*R until R converges
-    while convergence > 1e-8:
+    while convergence > tol:
         AR = np.einsum('ijk,kl->ijl', A, R)
         Rnew, A_R = RQPositive(np.resize(AR, (D, D*d)))
         Rnew = Rnew / np.linalg.norm(Rnew) # only necessary when working with unnormalised MPS
@@ -299,17 +298,85 @@ def Heisenberg(Jx,Jy,Jz,h):
     return -Jx*np.einsum('ij,kl->ijkl',Sx, Sx)-Jy*np.einsum('ij,kl->ijkl',Sy, Sy)-Jz*np.einsum('ij,kl->ijkl',Sz, Sz) \
             - h*np.einsum('ij,kl->ijkl',I,Sz) - h*np.einsum('ij,kl->ijkl',Sz,I)
             
-def ExpVal1(O, A, l, r):
+def oneSiteUniform(O, A, l, r):
     #determine expectation value of one-body operator in uniform gauge
     #first right contraction
-    righthalf =  np.einsum('isk,kl,jpl->ispj', A, r, np.conj(A))
-    temp = np.einsum('ij,ispj->sp', l, righthalf)
-    O_exp = np.einsum('sp, sp',temp, O)
-    return O_exp
+    return np.einsum('ijk,mnl,mi,kl,jn', A, np.conj(A), l, r, O)
 
-def ExpVal1_mix(O, aC):
+def oneSiteMixed(O, Ac):
     #determine expectation value of one-body operator in mixed gauge
     #first right contraction
-    temp = np.einsum('isk,ipk-> sp', aC, np.conj(aC))
-    O_exp = np.einsum('sp, sp', temp, O)
-    return O_exp
+    # ikjl is juiste sequence
+
+    return np.einsum('ijk,jl,ilk', Ac, O, np.conj(Ac))
+
+def twoSiteUniform(H, A, l, r):
+    #calculate the expectation value of the hamiltonian H (top left - top right - bottom left - bottom right)
+    #that acts on two sites
+    #contraction done from right to left
+    return np.einsum('ijk,klm,jlqo,rqp,pon,ri,mn', A, A, H, np.conj(A), np.conj(A), l, r)
+
+def twoSiteMixed(H, Ac, Ar):
+    #calculate the expectation value of the hamiltonian H (top left - top right - bottom left - bottom right)
+    #in mixed canonical form that acts on two sites, contraction done from right to left
+    #case where Ac on left legs of H
+    # kjlipmno
+    return np.einsum('ijk,klm,jlpn,ipo,onm', Ac, Ar, H, np.conj(Ac), np.conj(Ar))
+
+def leftHandle_(A, r, l, v):
+    # function that implements the action of 1-T + outer(r,l)
+    # on a left vector of dimension D**2 v (bottom - top)
+    # returns a vector of dimension D**2 (bottom - top)
+
+    D = r.shape[0]
+    v_T = leftHandle(A,v)
+    v_rl = np.einsum('ji,ij,kl-> kl', v.reshape((D,D)), r, l)
+    return v - v_T + np.reshape(v_rl, D**2)
+
+def rightHandle_(A, r, l, v):
+    # function that implements the action of 1-T + outer(r,l)
+    # on a left vector of dimension D**2 v (bottom - top)
+    # returns a vector of dimension D**2 (bottom - top)
+
+    D = r.shape[0]
+    v_T = rightHandle(A,v)
+    v_rl = np.einsum('kl,ji,ij-> kl', r, l, v.reshape((D,D)))
+    return v - v_T + np.reshape(v_rl, D**2)
+
+def Gradient(H, A, l, r):
+    # a rank 3 tensor, equation (116) in the notes
+    # consists of 4 terms
+    # have to solve x = y(1-T_) where T_ = createTransfer(A) - np.outer(leftFixedPoint(A), rightFixedPoint(A))
+    # don't naively construct (1-T_) because all these objects have 4D legs. As before describe how this operator works on a vector y
+    # create function handle instead of D**2 matrix
+    D = A.shape[0]
+
+    transfer_Left = LinearOperator((D**2,D**2), matvec=partial(leftHandle_, A, r, l))
+    x = np.einsum('ijk,klm,jlqo,rqp,pon,ri->mn', A, A, H, np.conj(A), np.conj(A), l)
+    Lh = gmres(transfer_Left, x)
+    transfer_Right = LinearOperator((D**2,D**2), matvec=partial(rightHandle_, A, r, l))
+    x = np.einsum('ijk,klm,jlqo,rqp,pon,mn->ri', A, A, H, np.conj(A), np.conj(A), r)
+    Rh = gmres(transfer_Right, x)
+    
+    ###########
+    #FIRST TERM
+    ###########
+    first = np.einsum('ijk,klm,jlqo,pon,ri,mn->rqp', A, A, H, np.conj(A), l, r)
+    ###########
+    #SECOND TERM
+    ###########
+    second = np.einsum('ijk,klm,jlqo,rqp,ri,mn->pon', A, A, H, np.conj(A), l, r)
+
+    ###########
+    #THIRD TERM
+    ###########
+    third = np.einsum('mi,ijk,kl->mjl',l, A, Rh)
+
+    ###########
+    #FOURTH TERM
+    ###########
+    fourth = np.einsum('mi,ijk,kl->mjl',Lh, A, r)
+
+    # define Lh and Rh
+    return first+second+third+fourth
+    
