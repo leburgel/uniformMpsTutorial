@@ -346,6 +346,8 @@ def rightHandle_(A, r, l, v):
     return v - v_T + np.reshape(v_rl, D**2)
 
 
+
+
 def Gradient(H, A, l, r):
     # a rank 3 tensor, equation (116) in the notes
     # consists of 4 terms
@@ -353,14 +355,15 @@ def Gradient(H, A, l, r):
     # don't naively construct (1-T_) because all these objects have 4D legs. As before describe how this operator works on a vector y
     # create function handle instead of D**2 matrix
     D = A.shape[0]
-
+    path1 = 'einsum_path', (0, 5), (0, 1, 2, 3, 4)
     transfer_Left = LinearOperator((D**2, D**2), matvec=partial(leftHandle_, A, r, l))
-    x = np.einsum('ijk,klm,jlqo,rqp,pon,ri->mn', A, A, H, np.conj(A), np.conj(A), l)
+    x = np.einsum('ijk,klm,jlqo,rqp,pon,ri->mn', A, A, H, np.conj(A), np.conj(A), l, optimize=path1)
     x = np.reshape(x, D**2)
     Lh = gmres(transfer_Left, x)[0]
 
-    transfer_Right = LinearOperator((D**2,D**2), matvec=partial(rightHandle_, A, r, l))
-    x = np.einsum('ijk,klm,jlqo,rqp,pon,mn->ri', A, A, H, np.conj(A), np.conj(A), r)
+    path2 = 'einsum_path', (1, 5), (0, 1, 2, 3, 4)
+    transfer_Right = LinearOperator((D**2, D**2), matvec=partial(rightHandle_, A, r, l))
+    x = np.einsum('ijk,klm,jlqo,rqp,pon,mn->ri', A, A, H, np.conj(A), np.conj(A), r, optimize=path2)
     x = np.reshape(x, D**2)
     Rh = gmres(transfer_Right, x.reshape(D**2))[0]
 
@@ -369,11 +372,13 @@ def Gradient(H, A, l, r):
     ###########
     #FIRST TERM
     ###########
-    first = np.einsum('ijk,klm,jlqo,pon,ri,mn->rqp', A, A, H, np.conj(A), l, r)
+    path3 = 'einsum_path', (0, 4), (0, 3), (0, 1, 2, 3)
+    first = np.einsum('ijk,klm,jlqo,pon,ri,mn->rqp', A, A, H, np.conj(A), l, r, optimize=path2)
     ###########
     #SECOND TERM
     ###########
-    second = np.einsum('ijk,klm,jlqo,rqp,ri,mn->pon', A, A, H, np.conj(A), l, r)
+    path3 = 'einsum_path', (0, 4), (0, 3), (0, 1, 2, 3)
+    second = np.einsum('ijk,klm,jlqo,rqp,ri,mn->pon', A, A, H, np.conj(A), l, r, optimize=path3)
 
     ###########
     #THIRD TERM
@@ -414,14 +419,22 @@ def gradientWrapper(H, D, d, varA):
     return g
 
 ### A first test case for the gradient in python
-D = 4
+D = 6
 d = 3
 
-H = Heisenberg(-1,-1,-1,0)
+H = Heisenberg(-1, -1, -1, 0)
 
 A = createMPS(D,d)
 ReA = np.real(A)
 ImA = np.imag(A)
+
+if False:
+    # calculatee optimal paths for gradient contractions
+    r = np.ones((D, D))
+    l = np.ones((D, D))
+    path = np.einsum_path('ijk,klm,jlqo,rqp,ri,mn->pon', A, A, H, np.conj(A), l, r, optimize='optimal')
+
+    print(path)
 
 # extra haakjes om real(g) en imag(g) in tuple te plaatsen voor concate anders error !!!
 varA = np.concatenate((ReA.reshape(-1), ImA.reshape(-1)))
