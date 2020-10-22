@@ -412,12 +412,6 @@ def energyWrapper(H, D, d, varA):
     g = np.concatenate((np.real(g).reshape(-1), np.imag(g).reshape(-1)))
     return e, g
 
-#hier wel nog wat werk denk ik
-def gradientWrapper(H, D, d, varA):
-    _, g = energyDensity(A, H)
-    #extra haakjes om real(g) en imag(g) in tuple te plaatsen voor concate anders error !!!
-
-    return g
 
 ### A first test case for the gradient in python
 D = 8
