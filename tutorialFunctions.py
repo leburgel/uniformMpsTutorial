@@ -15,9 +15,9 @@ def createMPS(bondDimension, physDimension):
 
 def createTransfer(A):
     # function to return a transfer matrix starting from a given MPS tensor.
-    # returns a 4-legged tensor (topLeft - topRight - bottomLeft - bottomRight)
+    # returns a 4-legged tensor (topLeft - bottomLeft - topRight - bottomRight)
 
-    return np.einsum('isj,ksl->ijkl', A, np.conj(A))
+    return np.einsum('isk,jsl->ijkl', A, np.conj(A))
 
 
 def leftFixedPoint(A):
@@ -556,7 +556,7 @@ def rightEnvMixed(Ar, C, hTilde, delta):
     D = Ar.shape[0]
     transfer_Right = LinearOperator((D**2, D**2), matvec=partial(transferRegularRight, Ar, C @ np.conj(C).T, np.eye(D)))
     xR = np.einsum("ijk,klm,nop,pqm,jloq->in", Ar, Ar, np.conj(Ar), np.conj(Ar), hTilde, optimize=True)
-    Rh = gmres(transfer_Right, xR.reshape(-1), tol=delta/10)[0] # tol or atol???
+    Rh = gmres(transfer_Right, xR.reshape(-1), tol=delta/10)[0]
     
     return Rh.reshape(D, D)
 
@@ -572,7 +572,7 @@ def leftEnvMixed(Al, C, hTilde, delta):
     D = Al.shape[0]
     transfer_Left = LinearOperator((D**2, D**2), matvec=partial(transferRegularLeft, Al, np.eye(D), C @ np.conj(C).T))
     xL = np.einsum("ijk,klm,ino,opq,jlnp->qm", Al, Al, np.conj(Al), np.conj(Al), hTilde, optimize=True)
-    Lh = gmres(transfer_Left, xL.reshape(-1), tol=delta/10)[0] # tol or atol???
+    Lh = gmres(transfer_Left, xL.reshape(-1), tol=delta/10)[0]
 
     return Lh.reshape(D, D)
 

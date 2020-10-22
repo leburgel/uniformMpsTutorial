@@ -1,8 +1,9 @@
 from tutorialFunctions import *
+import matplotlib.pyplot as plt
 ### A first test case for the gradient in python
 D = 6
 d = 3
-J = 1
+J = -1
 
 H = Heisenberg(J, J, J, 0)
 
@@ -22,7 +23,7 @@ if False:
 varA = np.concatenate((ReA.reshape(-1), ImA.reshape(-1)))
 
 
-if True:
+if False:
     # test gradient descent
     
     #pr.enable()
@@ -60,4 +61,9 @@ if True:
         print(delta)
         Al = AlPrime; Ar = ArPrime; Ac = AcPrime; C = CPrime;
         if delta < tol:
-            flag = 0 
+            flag = 0
+    [_, S, _] = svd(C);
+    plt.figure()
+    plt.scatter(np.arange(D), S, marker='x')
+    plt.show()
+
