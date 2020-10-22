@@ -337,7 +337,8 @@ def twoSiteUniform(H, A, l, r):
     #calculate the expectation value of the hamiltonian H (top left - top right - bottom left - bottom right)
     #that acts on two sites
     #contraction done from right to left
-    return np.einsum('ijk,klm,jlqo,rqp,pon,ri,mn', A, A, H, np.conj(A), np.conj(A), l, r)
+    path = 'einsum_path', (0, 5), (0, 4), (0, 1, 2, 3, 4)
+    return np.einsum('ijk,klm,jlqo,rqp,pon,ri,mn', A, A, H, np.conj(A), np.conj(A), l, r, optimize=path)
 
 
 def twoSiteMixed(H, Ac, Ar):
@@ -398,6 +399,15 @@ def rightHandle_(A, r, l, v):
 
 
 def Gradient(H, A, l, r):
+    """
+    Function to determine the gradient of H @MPS A
+    :param H: (d, d, d, d) hamiltonian density operator
+    :param A: (D, d, D) MPS tensor
+    :param l: (D, D) left fixed point (normalised!)
+    :param r: (D, D) right fixed point (normalised!)
+    :return:
+    """
+
     # a rank 3 tensor, equation (116) in the notes
     # consists of 4 terms
     # have to solve x = y(1-T_) where T_ = createTransfer(A) - np.outer(leftFixedPoint(A), rightFixedPoint(A))
@@ -466,7 +476,7 @@ def energyDensity(A, h):
     e = twoSiteUniform(h, A, l, r)
 
     # check if real!
-    if np.imag(e) > 1e-10:
+    if np.imag(e) > 1e-14:
         print("complex energy? ", e)
     e = np.real(e)
 
