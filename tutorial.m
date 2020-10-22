@@ -4,7 +4,7 @@
 
 tol = 1e-12;
 
-D = 6;
+D = 12;
 d = 3;
 
 A = randcomplex(D, d, D); % MPS tensor
@@ -261,6 +261,7 @@ delta = 1e-4;
 tic
 while flag
     e = real(ExpvTwoSiteMixed(AC, AL, h)); % current energy density
+    e
     htilde = h - e * ncon({eye(d), eye(d)}, {[-1 -3], [-2 -4]}); % regularized energy density
     Rh = RightEnvMixed(AR, C, htilde, delta);
     Lh = LeftEnvMixed(AL, C, htilde, delta);

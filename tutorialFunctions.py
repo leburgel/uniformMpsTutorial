@@ -359,7 +359,7 @@ def Heisenberg(Jx, Jy, Jz, h):
     Sx = np.array([[0, 1, 0], [1, 0, 1], [0, 1, 0]]) / np.sqrt(2)
     Sy = np.array([[0, 1, 0], [-1, 0, 1], [0, -1, 0]]) * 1.0j /np.sqrt(2)
     Sz = np.array([[1, 0, 0], [0, 0, 0], [0, 0, -1]])
-    I = np.identity(3)
+    I = np.eye(3)
 
     return -Jx*np.einsum('ij,kl->ikjl', Sx, Sx)-Jy*np.einsum('ij,kl->ikjl',Sy, Sy)-Jz*np.einsum('ij,kl->ikjl', Sz, Sz) \
             - h*np.einsum('ij,kl->ikjl', I, Sz) - h*np.einsum('ij,kl->ikjl', Sz, I)
@@ -393,7 +393,7 @@ def twoSiteMixed(H, Ac, Ar):
     #in mixed canonical form that acts on two sites, contraction done from right to left
     #case where Ac on left legs of H
     # kjlipmno
-    return np.einsum('ijk,klm,jlpn,ipo,onm', Ac, Ar, H, np.conj(Ac), np.conj(Ar))
+    return np.einsum('ijk,klm,jlpn,ipo,onm', Ac, Ar, H, np.conj(Ac), np.conj(Ar), optimize=True)
 
 
 def transferRight(A, v):
@@ -423,7 +423,7 @@ def transferLeft(A, v):
     return np.reshape(newV, D**2)
 
 
-def transferRegularLeft(A, r, l, v):
+def transferRegularLeft(A, l, r, v):
     # function that implements the action of 1-T + outer(r,l)
     # on a left vector of dimension D**2 v (bottom - top)
     # returns a vector of dimension D**2 (bottom - top)
@@ -434,7 +434,7 @@ def transferRegularLeft(A, r, l, v):
     return v - v_T + np.reshape(v_rl, D**2)
 
 
-def transferRegularRight(A, r, l, v):
+def transferRegularRight(A, l, r, v):
     # function that implements the action of 1-T + outer(r,l)
     # on a left vector of dimension D**2 v (bottom - top)
     # returns a vector of dimension D**2 (bottom - top)
@@ -465,13 +465,13 @@ def energyGradient(H, A, l, r):
 
     path1 = 'einsum_path', (0, 5), (0, 1, 2, 3, 4)
 
-    transfer_Left = LinearOperator((D**2, D**2), matvec=partial(transferRegularLeft, A, r, l))
+    transfer_Left = LinearOperator((D**2, D**2), matvec=partial(transferRegularLeft, A, l, r))
     x = np.einsum('ijk,klm,jlqo,rqp,pon,ri->nm', A, A, H, np.conj(A), np.conj(A), l, optimize=path1)
     x = np.reshape(x, D**2)
     Lh = gmres(transfer_Left, x)[0]
 
     path2 = 'einsum_path', (1, 5), (0, 1, 2, 3, 4)
-    transfer_Right = LinearOperator((D**2, D**2), matvec=partial(transferRegularRight, A, r, l))
+    transfer_Right = LinearOperator((D**2, D**2), matvec=partial(transferRegularRight, A, l, r))
     x = np.einsum('ijk,klm,jlqo,rqp,pon,mn->ir', A, A, H, np.conj(A), np.conj(A), r, optimize=path2)
     x = np.reshape(x, D**2)
     Rh = gmres(transfer_Right, x.reshape(D**2))[0]
@@ -527,7 +527,7 @@ def energyDensity(A, h):
     e = np.real(e)
 
     # renormalise Hamiltonian
-    hTilde = h - e * np.einsum("ik,jl->ijkl", np.identity(d), np.identity(d))
+    hTilde = h - e * np.einsum("ik,jl->ijkl", np.eye(d), np.eye(d))
 
     # calculate gradient
     g = energyGradient(hTilde, A, l, r)
@@ -545,7 +545,7 @@ def energyWrapper(H, D, d, varA):
 #### functions for vumps
 
 # right environment vumps
-def RightEnvMixed(Ar, C, hTilde):
+def rightEnvMixed(Ar, C, hTilde, delta):
     '''
     :param Ar:
     :param L:
@@ -554,18 +554,15 @@ def RightEnvMixed(Ar, C, hTilde):
     :return:
     '''
     D = Ar.shape[0]
-    xR = np.einsum("ijk,klm,nop,pqm,jloq->in", Ar, Ar, np.conj(Ar), np.conj(Ar), hTilde)
-    handleR = lambda v: (v.reshape(D, D) - np.einsum("ij,kli,mlj->km", v.reshape(D, D), Ar, np.conj(Ar))\
-                        + np.trace((np.conj(C).T @ C) @ v.reshape(D, D)) * np.identity(D)).reshape(-1)
-    Rh = gmres(handleR, xR.reshape(-1))[0]
-    Rh = Rh.reshape(D, D)
-
-    return Rh
+    transfer_Right = LinearOperator((D**2, D**2), matvec=partial(transferRegularRight, Ar, C @ np.conj(C).T, np.eye(D)))
+    xR = np.einsum("ijk,klm,nop,pqm,jloq->in", Ar, Ar, np.conj(Ar), np.conj(Ar), hTilde, optimize=True)
+    Rh = gmres(transfer_Right, xR.reshape(-1), tol=delta/10)[0] # tol or atol???
+    
+    return Rh.reshape(D, D)
 
 #left environment vumps
-def LeftEnvMixed(Al, C, hTilde):
+def leftEnvMixed(Al, C, hTilde, delta):
     '''
-
     :param Al:
     :param L:
     :param R:
@@ -573,16 +570,14 @@ def LeftEnvMixed(Al, C, hTilde):
     :return:
     '''
     D = Al.shape[0]
-    xL = np.einsum("ijk,klm,ino,opq,jlnp->qm", Al, Al, np.conj(Al), np.conj(Al), hTilde)
-    handleL = lambda v: (v.reshape(D, D) - np.einsum("ij,jkl,ikm->ml", v.reshape(D, D), Al, np.conj(Al))\
-                        + np.trace(v.reshape(D, D) @ (C @ np.conj(C).T)) * np.identity(D)).reshape(-1)
-    Lh = (gmres(handleL, xL.reshape(-1))[0]).reshape(D, D)
+    transfer_Left = LinearOperator((D**2, D**2), matvec=partial(transferRegularLeft, Al, np.eye(D), C @ np.conj(C).T))
+    xL = np.einsum("ijk,klm,ino,opq,jlnp->qm", Al, Al, np.conj(Al), np.conj(Al), hTilde, optimize=True)
+    Lh = gmres(transfer_Left, xL.reshape(-1), tol=delta/10)[0] # tol or atol???
 
-    return Lh
+    return Lh.reshape(D, D)
 
-def hAc(v, Al, Ar, Rh, Lh, hTilde):
+def H_Ac(v, Al, Ar, Rh, Lh, hTilde):
     '''
-
     :param v:
     :param Al:
     :param Ar:
@@ -591,16 +586,15 @@ def hAc(v, Al, Ar, Rh, Lh, hTilde):
     :param hTilde:
     :return:
     '''
-    centerTerm1 = np.einsum("ijk,klm,ino,jlnp->opm", Al, v, np.conj(A_l).T, hTilde)
-    centerTerm2 = np.einsum("ijk,klm,nom,jlpo->ipn", v, Ar, np.conj(Ar), hTilde)
+    centerTerm1 = np.einsum("ijk,klm,ino,jlnp->opm", Al, v, np.conj(Al).T, hTilde, optimize=True)
+    centerTerm2 = np.einsum("ijk,klm,nom,jlpo->ipn", v, Ar, np.conj(Ar), hTilde, optimize=True)
     leftEnvTerm = np.einsum("ij,jkl -> ikl", Lh, v)
     rightEnvTerm = np.einsum("ijk,kl->ijl", v, Rh)
 
     return centerTerm1 + centerTerm2 + leftEnvTerm + rightEnvTerm
 
-def hC(v, Al, Ar, Rh, Lh, hTilde):
+def H_C(v, Al, Ar, Rh, Lh, hTilde):
     '''
-
     :param v:
     :param Al:
     :param Ar:
@@ -609,15 +603,14 @@ def hC(v, Al, Ar, Rh, Lh, hTilde):
     :param hTilde:
     :return:
     '''
-    centerTerm = np.einsum("ijk,kl,lmn,iop,qrn,jmor->pq", Al, v, Ar, np.conj(Al), np.conj(Ar), hTilde)
+    centerTerm = np.einsum("ijk,kl,lmn,iop,qrn,jmor->pq", Al, v, Ar, np.conj(Al), np.conj(Ar), hTilde, optimize=True)
     leftEnvTerm = Lh @ v
     rightEnvTerm = v @ Rh
 
     return centerTerm + leftEnvTerm + rightEnvTerm
 
-def calcNewCenter(Al, Ar, C, Lh, Rh, hTilde):
+def calcNewCenter(Al, Ar, C, Lh, Rh, hTilde, delta):
     '''
-
     :param Al:
     :param Ar:
     :param L:
@@ -627,21 +620,22 @@ def calcNewCenter(Al, Ar, C, Lh, Rh, hTilde):
     :param hTilde:
     :return:
     '''
-
+    
     D = Al.shape[0]
     d = Al.shape[1]
     Ac = np.einsum("ijk,kl->ijl", Al, C)
-    handleAc = lambda v: (hAc(v.reshape(D, d, D), Al, Ar, Rh, Lh, hTilde)).reshape(-1)
-    handleC = lambda v: (hC(v.reshape(D, D), Al, Ar, Rh, Lh, hTilde)).reshape(-1)
-    _, AcPrime = eigs(handleAc,k=1,which = "SR", v0=Ac.reshape(-1))
+    handleAc = lambda v: (H_Ac(v.reshape(D, d, D), Al, Ar, Rh, Lh, hTilde)).reshape(-1)
+    handleAc = LinearOperator((D ** 2 * d, D ** 2 * d), matvec=handleAc)
+    handleC = lambda v: (H_C(v.reshape(D, D), Al, Ar, Rh, Lh, hTilde)).reshape(-1)
+    handleC = LinearOperator((D ** 2, D ** 2), matvec=handleC)
+    _, AcPrime = eigs(handleAc, k=1, which="SR", v0=Ac.reshape(-1), tol=delta/10)
     AcPrime = AcPrime.reshape(D, d, D)
-    _, cPrime = eigs(handleC,k=1,which = "SR", v0=C.reshape(-1))
+    _, cPrime = eigs(handleC, k=1, which="SR", v0=C.reshape(-1), tol=delta/10)
     cPrime = cPrime.reshape(D, D)
     return AcPrime, cPrime
 
 def minAcC(AcPrime, cPrime):
     '''
-
     :param AcPrime:
     :param cPrime:
     :return:
@@ -659,26 +653,25 @@ def minAcC(AcPrime, cPrime):
     Ac /= np.sqrt(norm)
     return Al, Ar, Ac, C
 
-# ###### VUMPS test Heisenberg antiferromagnet
+###### VUMPS test Heisenberg antiferromagnet
 
-# tol = 1e-3
-# D = 4
-# d = 3
-# h = Heisenberg(1, -1, 1, 0)
-# A = createMPS(D, d)
-# A = normaliseMPS(A)[0]
-# L, Al = leftOrthonormal(A)
-# R, Ar = rightOrthonormal(A)
-# C = L @ R
-# Ac = np.einsum("ijk,kl->ijl", Al, C)
-# flag = 1
-
-# ######## some problems with calculating Rh and Lh here
-# while flag < 100:
-#     e = np.real(twoSiteMixed(h, Ac, Ar))
-#     hTilde = h - e * np.einsum("ik,jl->ijkl", np.identity(d), np.identity(d))
-#     Rh = RightEnvMixed(Ar, C, hTilde)
-#     Lh = LeftEnvMixed(Al, C, hTilde)
-#     AcPrime, cPrime = calcNewCenter(Al, Ar, C, Lh, Rh, hTilde)
-#     AlPrime, ArPrime, AcPrime, cPrime = minAcC(AcPrime, cPrime)
-#     flag += 1
+tol = 1e-3
+D = 4
+d = 3
+h = Heisenberg(1, -1, 1, 0)
+A = normaliseMPS(createMPS(D, d))[0]
+Al, Ar, Ac, C = mixedCanonical(A)
+flag = 1
+delta = 1e-4
+while flag:
+    e = np.real(twoSiteMixed(h, Ac, Ar))
+    print(e)
+    hTilde = h - e * np.einsum("ik,jl->ijkl", np.eye(d), np.eye(d))
+    Rh = rightEnvMixed(Ar, C, hTilde, delta)
+    Lh = leftEnvMixed(Al, C, hTilde, delta)
+    AcPrime, CPrime = calcNewCenter(Al, Ar, C, Lh, Rh, hTilde, delta)
+    AlPrime, ArPrime, AcPrime, CPrime = minAcC(AcPrime, CPrime)
+    delta = np.linalg.norm(H_Ac(Ac, Al, Ar, Rh, Lh, hTilde) - np.einsum('ijk,kl->ijl', Al, H_C(C, Al, Ar, Rh, Lh, hTilde)))
+    Al = AlPrime; Ar = ArPrime; Ac = AcPrime; C = CPrime;
+    if delta < tol:
+        flag = 0 
