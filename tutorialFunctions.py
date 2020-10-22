@@ -17,31 +17,9 @@ def createMPS(bondDimension, physDimension):
 
 def createTransfer(A):
     # function to return a transfer matrix starting from a given MPS tensor.
-    # returns a 4-legged tensor (topLeft - bottomLeft - topRight - bottomRight)
+    # returns a 4-legged tensor (topLeft - topRight - bottomLeft - bottomRight)
 
-    return np.einsum('isk,jsl->ijkl', A, np.conj(A))
-
-
-def normaliseMPS(A):
-    """
-    Function to normalise a given MPS tensor using O(D^3) algorithm
-    input: A --- (D, d, D) MPStensor
-    output: A --- (D, d, D) MPStensor
-    """
-
-    D = A.shape[0]
-
-    # set optimal contraction sequence
-    path = ['einsum_path', (0, 2), (0, 1)]
-
-    # calculate transfer matrix handle and cast to LinearOperator
-    transferRightHandle = lambda v: np.reshape(np.einsum('ijk,ljm,km->il', A, np.conj(A), v.reshape((D, D)), optimize=path), D ** 2)
-    transferRight = LinearOperator((D ** 2, D ** 2), matvec=transferRightHandle)
-
-    # calculate eigenvalue
-    lam = eigs(transferRight, k=1, which='LM', return_eigenvectors=False)
-
-    return A / np.sqrt(lam)
+    return np.einsum('isj,ksl->ijkl', A, np.conj(A))
 
 
 def leftFixedPoint(A):
@@ -49,6 +27,7 @@ def leftFixedPoint(A):
     Function to determine the left fixed point of a given MPS tensor using O(D^3) algorithm
     input: A --- (D, d, D) MPStensor
     output: l --- (D, D) leftFixedPointTensor (bottom-top)
+            lam --- scalar eigenvalue of leftFixedPointTensor
     """
 
     D = A.shape[0]
@@ -62,9 +41,9 @@ def leftFixedPoint(A):
     transferLeft = LinearOperator((D ** 2, D ** 2), matvec=transferLeftHandle)
 
     # calculate fixed point
-    _, l = eigs(transferLeft, k=1, which='LM')
+    lam, l = eigs(transferLeft, k=1, which='LM')
 
-    return l.reshape(D, D)
+    return lam, l.reshape(D, D)
 
 
 def rightFixedPoint(A):
@@ -72,6 +51,7 @@ def rightFixedPoint(A):
     Function to determine the right fixed point of a given MPS tensor using O(D^3) algorithm
     input: A --- (D, d, D) MPStensor
     output: r --- (D, D) rightFixedPointTensor (top-bottom)
+            lam --- scalar eigenvalue of rightFixedPointTensor
     """
 
     D = A.shape[0]
@@ -85,20 +65,42 @@ def rightFixedPoint(A):
     transferRight = LinearOperator((D ** 2, D ** 2), matvec=transferRightHandle)
 
     # calculate fixed point
-    _, r = eigs(transferRight, k=1, which='LM')
+    lam, r = eigs(transferRight, k=1, which='LM')
 
-    return r.reshape(D, D)
+    return lam, r.reshape(D, D)
 
 
-def normaliseFixedPoints(rhoL, rhoR):
+def normaliseFixedPoints(l, r):
     # function that normalises given left and right fixed points
     # such that they trace to unity (interpretation as density matrix)
-    # returns (rhoL, rhoR)
+    # returns (l, r)
 
-    trace = np.einsum('ij,ji->', rhoL, rhoR)
+    trace = np.einsum('ij,ji->', l, r)
     # trace = np.trace(rhoL*rhoR) # might work as well/be faster than einsum?
     norm = np.sqrt(trace)
-    return rhoL/norm, rhoR/norm
+    return l/norm, r/norm
+
+
+def normaliseMPS(A, l, r):
+    """
+    Function to normalise a given MPS tensor using O(D^3) algorithm
+    input: A --- (D, d, D) MPStensor
+    output: A --- (D, d, D) normalised MPStensor
+            l --- (D, D) leftFixedPointTensor (bottom-top)
+            r --- (D, D) rightFixedPointTensor (top-bottom)
+    """
+
+    # calculate left and right fixed points of transfer matrix
+    lam, l = leftFixedPoint(A)
+    r = rightFixedPoint(A)[1]
+    
+    # normalise MPS tensor
+    A /= np.sqrt(lam)
+    
+    # normalise fixed points
+    l, r = normaliseFixedPoints(l, r)
+
+    return A, l, r
 
 
 def qrPositive(A):
@@ -213,9 +215,6 @@ def rightOrthonormal(A, R0=None, tol=1e-14, maxIter=1e5):
     output: R --- Matrix (D, D) gauges A to Al
             Ar --- MPSTensor (D, d, D) right-orthonormal, -conj(Ar)=Ar- = --
     """
-    # function that brings MPS A into right orthonormal gauge, such that
-    # A * R = R * A_R
-    # returns (R, A_R)
 
     D = A.shape[0]
     d = A.shape[1]
@@ -252,6 +251,59 @@ def rightOrthonormal(A, R0=None, tol=1e-14, maxIter=1e5):
         i += 1
 
     return R, np.resize(Ar, (D, d, D))
+
+
+def mixedCanonical(A, L0=None, R0=None, tol=1e-14, maxIter=1e5):
+    """
+    Function that brings MPS into mixed gauge,
+    such that -Al-C- = -C-Ar- = Ac
+    input:  A --- MPSTensor (D, d, D)
+            L0 --- initial guess for L
+            R0 --- initial guess for R
+            tol --- convergence tolerance
+            maxIter --- max amount of steps
+    output: Al --- MPSTensor (D, d, D) left-orthonormal, -conj(Al)=Al- = --
+            Ar --- MPSTensor (D, d, D) right-orthonormal, -conj(Ar)=Ar- = --
+            Ac --- MPSTensor (D, d, D) center tensor
+            C --- Matrix (D, D) center matrix, -Al-C- = -C-Ar- = Ac
+    """
+
+    D = A.shape[0]
+
+    # Random guess for  L0 if none specified
+    if not L0:
+        L0 = np.random.rand(D, D)
+
+    # Random guess for  R0 if none specified
+    if not R0:
+        R0 = np.random.rand(D, D)
+    
+    # Compute left and right orthonormal forms
+    L, Al = leftOrthonormal(A, L0, tol, maxIter)
+    R, Ar = rightOrthonormal(A, L0, tol, maxIter)
+    
+    # center matrix C is matrix multiplication of L and R
+    C = L @ R
+    
+    # singular value decomposition to diagonalise C
+    U, S, V = svd(C)
+    C = np.diag(S)
+
+    # # for well defined L and R, normalisation probably not necessary but just in case
+    # S = S / C[0]
+    
+    # absorb corresponding unitaries in Al and Ar
+    Al = np.einsum('ij,jkl,lm->ikm', np.conj(U).T, Al, U)
+    Ar = np.einsum('ij,jkl,lm->ikm', V, Ar, np.conj(V).T) # svd already gives V^dagger, so have to switch daggers here I think
+
+    # compute center MPS tensor
+    Ac = np.einsum('ijk,kl->ijl', Al, C)
+    
+    # normalise MPS in mixed gauge
+    nrm = np.einsum('ijk,ijk', Ac, np.conj(Ac))
+    Ac /= np.sqrt(nrm);
+    
+    return Al, Ar, Ac, C
 
 
 def entanglementSpectrum(aL, aR, L, R, truncate=0):
