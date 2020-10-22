@@ -422,12 +422,13 @@ def Gradient(H, A, l, r):
     #FIRST TERM
     ###########
     path3 = 'einsum_path', (0, 4), (0, 3), (0, 1, 2, 3)
-    first = np.einsum('ijk,klm,jlqo,pon,ri,mn->rqp', A, A, H, np.conj(A), l, r, optimize=path2)
+    first = np.einsum('ijk,klm,jlqo,pon,ri,mn->rqp', A, A, H, np.conj(A), l, r, optimize=path3)
+    
     ###########
     #SECOND TERM
     ###########
-    path3 = 'einsum_path', (0, 4), (0, 3), (0, 1, 2, 3)
-    second = np.einsum('ijk,klm,jlqo,rqp,ri,mn->pon', A, A, H, np.conj(A), l, r, optimize=path3)
+    path4 = 'einsum_path', (0, 4), (0, 3), (0, 1, 2, 3)
+    second = np.einsum('ijk,klm,jlqo,rqp,ri,mn->pon', A, A, H, np.conj(A), l, r, optimize=path4)
 
     ###########
     #THIRD TERM
