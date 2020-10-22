@@ -398,7 +398,7 @@ def twoSiteMixed(H, Ac, Ar):
     return np.einsum('ijk,klm,jlpn,ipo,onm', Ac, Ar, H, np.conj(Ac), np.conj(Ar))
 
 
-def rightHandle(A, v):
+def transferRight(A, v):
     # function that implements the action of a transfer matrix defined by A
     # on a right vector of dimension D**2 v (top - bottom)
     # returns a vector of dimension D**2 (top - bottom)
@@ -412,7 +412,7 @@ def rightHandle(A, v):
     return np.reshape(newV, D**2)
 
 
-def leftHandle(A,v):
+def transferLeft(A, v):
     # function that implements the action of a transfer matrix defined by A
     # on a left vector of dimension D**2 v (bottom - top)
     # returns a vector of dimension D**2 (bottom - top)
@@ -420,29 +420,31 @@ def leftHandle(A,v):
     D = A.shape[0]
 
     # contraction sequence: contract A with v, then with Abar
-    newV = np.einsum('ijk,li->ljk', A, v.reshape((D,D)))
+    newV = np.einsum('ijk,li->ljk', A, v.reshape((D, D)))
     newV = np.einsum('ljk,ljm->mk', newV, np.conj(A))
     return np.reshape(newV, D**2)
 
 
-def leftHandle_(A, r, l, v):
+def transferRegularLeft(A, r, l, v):
     # function that implements the action of 1-T + outer(r,l)
     # on a left vector of dimension D**2 v (bottom - top)
     # returns a vector of dimension D**2 (bottom - top)
 
+
+
     D = r.shape[0]
-    v_T = leftHandle(A, v)
+    v_T = transferLeft(A, v)
     v_rl = np.einsum('ji,ij,kl-> kl', v.reshape((D, D)), r, l)
     return v - v_T + np.reshape(v_rl, D**2)
 
 
-def rightHandle_(A, r, l, v):
+def transferRegularRight(A, r, l, v):
     # function that implements the action of 1-T + outer(r,l)
     # on a left vector of dimension D**2 v (bottom - top)
     # returns a vector of dimension D**2 (bottom - top)
 
     D = r.shape[0]
-    v_T = rightHandle(A,v)
+    v_T = transferRight(A, v)
     v_rl = np.einsum('kl,ji,ij-> kl', r, l, v.reshape((D,D)))
     return v - v_T + np.reshape(v_rl, D**2)
 
@@ -463,15 +465,19 @@ def Gradient(H, A, l, r):
     # don't naively construct (1-T_) because all these objects have 4D legs. As before describe how this operator works on a vector y
     # create function handle instead of D**2 matrix
     D = A.shape[0]
+
+
     path1 = 'einsum_path', (0, 5), (0, 1, 2, 3, 4)
-    transfer_Left = LinearOperator((D**2, D**2), matvec=partial(leftHandle_, A, r, l))
-    x = np.einsum('ijk,klm,jlqo,rqp,pon,ri->mn', A, A, H, np.conj(A), np.conj(A), l, optimize=path1)
+
+
+    transfer_Left = LinearOperator((D**2, D**2), matvec=partial(transferRegularLeft, A, r, l))
+    x = np.einsum('ijk,klm,jlqo,rqp,pon,ri->nm', A, A, H, np.conj(A), np.conj(A), l, optimize=path1)
     x = np.reshape(x, D**2)
     Lh = gmres(transfer_Left, x)[0]
 
     path2 = 'einsum_path', (1, 5), (0, 1, 2, 3, 4)
-    transfer_Right = LinearOperator((D**2, D**2), matvec=partial(rightHandle_, A, r, l))
-    x = np.einsum('ijk,klm,jlqo,rqp,pon,mn->ri', A, A, H, np.conj(A), np.conj(A), r, optimize=path2)
+    transfer_Right = LinearOperator((D**2, D**2), matvec=partial(transferRegularRight, A, r, l))
+    x = np.einsum('ijk,klm,jlqo,rqp,pon,mn->ir', A, A, H, np.conj(A), np.conj(A), r, optimize=path2)
     x = np.reshape(x, D**2)
     Rh = gmres(transfer_Right, x.reshape(D**2))[0]
 
