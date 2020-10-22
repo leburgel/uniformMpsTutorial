@@ -134,7 +134,7 @@ checkC1 = ArrayIsEqual(ncon({AL, C}, {[-1 -2 1], [1 -3]}), ncon({C, AR}, {[-1 1]
 % apply truncation if desired, default no truncation, t = 0
 t = 0;
 if t
-    % keep t highest values in C and their according unitaries U and V
+    % if t > 0, keep t highest values in C and their according unitaries U and V
     U = U(:,1:t);
     C = C(1:t,1:t);
     V = V(:,1:t);
@@ -208,7 +208,16 @@ expv2_2 = ncon({AL, AC, conj(AL), conj(AC), O2}, {...
 checkExpv2 = ArrayIsEqual(expv2_1, expv2_2, tol);
 
 
+<<<<<<< HEAD
+%% Variational optimization of two-site Heisenberg interaction through naive gradient descent
+
+% spin-1 angular momentum operators
+Sx = [0 1 0; 1 0 1; 0 1 0]/ sqrt(2);
+Sy = [0 -1 0; 1 0 -1; 0 1 0] * 1i/sqrt(2);
+Sz = [1 0 0; 0 0 0; 0 0 -1];
+=======
 %% Variational optimization of spin-1 Heisenberg Hamiltonian with gradient descent in uniform gauge
+>>>>>>> 7eb2d10b6c82640348f644b613c10d460b10c598
 
 % coupling strengths
 Jx = -1; Jy = -1; Jz = -1; hz = 0; % Heisenberg antiferromagnet

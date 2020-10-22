@@ -3,6 +3,7 @@ from scipy.linalg import rq
 from scipy.linalg import qr
 from scipy.linalg import svd
 from scipy.sparse.linalg import eigs, LinearOperator, gmres
+from scipy.optimize import minimize
 from functools import partial
 
 def createMPS(bondDimension, physDimension):
@@ -329,9 +330,10 @@ def leftHandle_(A, r, l, v):
     # returns a vector of dimension D**2 (bottom - top)
 
     D = r.shape[0]
-    v_T = leftHandle(A,v)
-    v_rl = np.einsum('ji,ij,kl-> kl', v.reshape((D,D)), r, l)
+    v_T = leftHandle(A, v)
+    v_rl = np.einsum('ji,ij,kl-> kl', v.reshape((D, D)), r, l)
     return v - v_T + np.reshape(v_rl, D**2)
+
 
 def rightHandle_(A, r, l, v):
     # function that implements the action of 1-T + outer(r,l)
@@ -343,6 +345,9 @@ def rightHandle_(A, r, l, v):
     v_rl = np.einsum('kl,ji,ij-> kl', r, l, v.reshape((D,D)))
     return v - v_T + np.reshape(v_rl, D**2)
 
+
+
+
 def Gradient(H, A, l, r):
     # a rank 3 tensor, equation (116) in the notes
     # consists of 4 terms
@@ -350,33 +355,88 @@ def Gradient(H, A, l, r):
     # don't naively construct (1-T_) because all these objects have 4D legs. As before describe how this operator works on a vector y
     # create function handle instead of D**2 matrix
     D = A.shape[0]
+    path1 = 'einsum_path', (0, 5), (0, 1, 2, 3, 4)
+    transfer_Left = LinearOperator((D**2, D**2), matvec=partial(leftHandle_, A, r, l))
+    x = np.einsum('ijk,klm,jlqo,rqp,pon,ri->mn', A, A, H, np.conj(A), np.conj(A), l, optimize=path1)
+    x = np.reshape(x, D**2)
+    Lh = gmres(transfer_Left, x)[0]
 
-    transfer_Left = LinearOperator((D**2,D**2), matvec=partial(leftHandle_, A, r, l))
-    x = np.einsum('ijk,klm,jlqo,rqp,pon,ri->mn', A, A, H, np.conj(A), np.conj(A), l)
-    Lh = gmres(transfer_Left, x)
-    transfer_Right = LinearOperator((D**2,D**2), matvec=partial(rightHandle_, A, r, l))
-    x = np.einsum('ijk,klm,jlqo,rqp,pon,mn->ri', A, A, H, np.conj(A), np.conj(A), r)
-    Rh = gmres(transfer_Right, x)
-    
+    path2 = 'einsum_path', (1, 5), (0, 1, 2, 3, 4)
+    transfer_Right = LinearOperator((D**2, D**2), matvec=partial(rightHandle_, A, r, l))
+    x = np.einsum('ijk,klm,jlqo,rqp,pon,mn->ri', A, A, H, np.conj(A), np.conj(A), r, optimize=path2)
+    x = np.reshape(x, D**2)
+    Rh = gmres(transfer_Right, x.reshape(D**2))[0]
+
+    Lh = np.reshape(Lh, (D, D))
+    Rh = np.reshape(Rh, (D, D))
     ###########
     #FIRST TERM
     ###########
-    first = np.einsum('ijk,klm,jlqo,pon,ri,mn->rqp', A, A, H, np.conj(A), l, r)
+    path3 = 'einsum_path', (0, 4), (0, 3), (0, 1, 2, 3)
+    first = np.einsum('ijk,klm,jlqo,pon,ri,mn->rqp', A, A, H, np.conj(A), l, r, optimize=path2)
     ###########
     #SECOND TERM
     ###########
-    second = np.einsum('ijk,klm,jlqo,rqp,ri,mn->pon', A, A, H, np.conj(A), l, r)
+    path3 = 'einsum_path', (0, 4), (0, 3), (0, 1, 2, 3)
+    second = np.einsum('ijk,klm,jlqo,rqp,ri,mn->pon', A, A, H, np.conj(A), l, r, optimize=path3)
 
     ###########
     #THIRD TERM
     ###########
-    third = np.einsum('mi,ijk,kl->mjl',l, A, Rh)
+    third = np.einsum('mi,ijk,kl->mjl', l, A, Rh)
 
     ###########
     #FOURTH TERM
     ###########
-    fourth = np.einsum('mi,ijk,kl->mjl',Lh, A, r)
+    fourth = np.einsum('mi,ijk,kl->mjl', Lh, A, r)
 
     # define Lh and Rh
     return first+second+third+fourth
     
+def energyDensity(A, H):
+    d = A.shape[1]
+    A, _ = normaliseMPS(A)
+    _, l = leftFixedPoint(A)
+    _, r = rightFixedPoint(A)
+    e = np.real(twoSiteUniform(H, A, l, r))
+    eOp = e * np.einsum("ik,jl->ijkl", np.identity(d), np.identity(d))
+    Htilde = H - eOp
+    g = Gradient(Htilde, A, l, r)
+    return e, g
+
+def energyWrapper(H, D, d, varA):
+    Areal = (varA[:D**2 *d]).reshape(D, d, D)
+    Acomplex = (varA[D**2*d:]).reshape(D, d, D)
+    A = Areal + 1j*Acomplex
+    e, g = energyDensity(A, H)
+    g = np.concatenate((np.real(g).reshape(-1), np.imag(g).reshape(-1)))
+    return e, g
+
+
+### A first test case for the gradient in python
+D = 8
+d = 3
+
+H = Heisenberg(1, 1, 1, 0)
+
+A = createMPS(D, d)
+ReA = np.real(A)
+ImA = np.imag(A)
+
+if False:
+    # calculatee optimal paths for gradient contractions
+    r = np.ones((D, D))
+    l = np.ones((D, D))
+    path = np.einsum_path('ijk,klm,jlqo,rqp,ri,mn->pon', A, A, H, np.conj(A), l, r, optimize='optimal')
+
+    print(path)
+
+# extra haakjes om real(g) en imag(g) in tuple te plaatsen voor concate anders error !!!
+varA = np.concatenate((ReA.reshape(-1), ImA.reshape(-1)))
+
+EnergyHandle = partial(energyWrapper, H, D, d)
+gradientHandle = partial(gradientWrapper, H, D, d)
+
+res = minimize(EnergyHandle, varA, jac=True)
+Aopt = res.x
+print(res.fun)
