@@ -290,14 +290,14 @@ def mixedCanonical(A, L0=None, R0=None, tol=1e-14, maxIter=1e5):
     # absorb corresponding unitaries in Al and Ar
     Al = np.einsum('ij,jkl,lm->ikm', np.conj(U).T, Al, U)
     Ar = np.einsum('ij,jkl,lm->ikm', Vdag, Ar, np.conj(Vdag).T)
+    
+    # normalise center matrix
+    nrm = np.trace(C @ np.conj(C).T)
+    C /= np.sqrt(nrm);
 
     # compute center MPS tensor
     Ac = np.einsum('ijk,kl->ijl', Al, C)
-    
-    # normalise MPS in mixed gauge
-    nrm = np.einsum('ijk,ijk', Ac, np.conj(Ac))
-    Ac /= np.sqrt(nrm);
-    
+        
     return Al, Ar, Ac, C
 
 
@@ -586,7 +586,7 @@ def H_Ac(v, Al, Ar, Rh, Lh, hTilde):
     :param hTilde:
     :return:
     '''
-    centerTerm1 = np.einsum("ijk,klm,ino,jlnp->opm", Al, v, np.conj(Al).T, hTilde, optimize=True)
+    centerTerm1 = np.einsum("ijk,klm,ino,jlnp->opm", Al, v, np.conj(Al), hTilde, optimize=True)
     centerTerm2 = np.einsum("ijk,klm,nom,jlpo->ipn", v, Ar, np.conj(Ar), hTilde, optimize=True)
     leftEnvTerm = np.einsum("ij,jkl -> ikl", Lh, v)
     rightEnvTerm = np.einsum("ijk,kl->ijl", v, Rh)
@@ -609,7 +609,7 @@ def H_C(v, Al, Ar, Rh, Lh, hTilde):
 
     return centerTerm + leftEnvTerm + rightEnvTerm
 
-def calcNewCenter(Al, Ar, C, Lh, Rh, hTilde, delta):
+def calcNewCenter(Al, Ar, Ac, C, Lh, Rh, hTilde, delta):
     '''
     :param Al:
     :param Ar:
@@ -623,7 +623,6 @@ def calcNewCenter(Al, Ar, C, Lh, Rh, hTilde, delta):
     
     D = Al.shape[0]
     d = Al.shape[1]
-    Ac = np.einsum("ijk,kl->ijl", Al, C)
     handleAc = lambda v: (H_Ac(v.reshape(D, d, D), Al, Ar, Rh, Lh, hTilde)).reshape(-1)
     handleAc = LinearOperator((D ** 2 * d, D ** 2 * d), matvec=handleAc)
     handleC = lambda v: (H_C(v.reshape(D, D), Al, Ar, Rh, Lh, hTilde)).reshape(-1)
@@ -656,11 +655,18 @@ def minAcC(AcPrime, cPrime):
 ###### VUMPS test Heisenberg antiferromagnet
 
 tol = 1e-3
-D = 4
+D = 12
 d = 3
 h = Heisenberg(1, -1, 1, 0)
 A = normaliseMPS(createMPS(D, d))[0]
 Al, Ar, Ac, C = mixedCanonical(A)
+
+assert np.allclose(np.einsum('ijk,ijl->kl', Al, np.conj(Al)), np.eye(D)), "Al not in left-orthonormal form"
+assert np.allclose(np.einsum('ijk,ljk->il', Ar, np.conj(Ar)), np.eye(D)), "Ar not in right-orthonormal form"
+LHS = np.einsum('ijk,kl->ijl', Al, C)
+RHS = np.einsum('ij,jkl->ikl', C, Ar)
+assert np.allclose(LHS, RHS) and np.allclose(RHS/np.sqrt(np.einsum('ijk,ijk', RHS, np.conj(RHS))), Ac), "Something went wrong in gauging the MPS"
+
 flag = 1
 delta = 1e-4
 while flag:
@@ -669,9 +675,10 @@ while flag:
     hTilde = h - e * np.einsum("ik,jl->ijkl", np.eye(d), np.eye(d))
     Rh = rightEnvMixed(Ar, C, hTilde, delta)
     Lh = leftEnvMixed(Al, C, hTilde, delta)
-    AcPrime, CPrime = calcNewCenter(Al, Ar, C, Lh, Rh, hTilde, delta)
+    AcPrime, CPrime = calcNewCenter(Al, Ar, Ac, C, Lh, Rh, hTilde, delta)
     AlPrime, ArPrime, AcPrime, CPrime = minAcC(AcPrime, CPrime)
     delta = np.linalg.norm(H_Ac(Ac, Al, Ar, Rh, Lh, hTilde) - np.einsum('ijk,kl->ijl', Al, H_C(C, Al, Ar, Rh, Lh, hTilde)))
+    print(delta)
     Al = AlPrime; Ar = ArPrime; Ac = AcPrime; C = CPrime;
     if delta < tol:
         flag = 0 

@@ -131,6 +131,10 @@ checkC1 = ArrayIsEqual(ncon({AL, C}, {[-1 -2 1], [1 -3]}), ncon({C, AR}, {[-1 1]
 % diagonalize C using SVD
 [U, C, V] = svd(C);
 
+% normalize center matrix
+nrm = trace(C * C');
+C = C / sqrt(nrm);
+
 % apply truncation if desired, default no truncation, t = 0
 t = 0;
 if t
@@ -160,11 +164,6 @@ else
     % entanglement entropy
     S = -sum(C^2*diag(log(C^2)));
 end
-
-% renormalize MPS in mixed gauge (is it normal that this is necessary?)
-nrm = ncon({AC, conj(AC)}, {[1 2 3], [1 2 3]});
-AC = AC/sqrt(nrm);
-
 
 
 %% Expectation values of single- and two-site operators
@@ -374,12 +373,13 @@ function [AL, AR, AC, C] = MixedCanonical(A, tol)
     [AL, L, ~] = LeftOrthonormalize(A, L0, tol);
     [AR, R, ~] = RightOrthonormalize(A, R0, tol);
     [U, C, V] = svd(L * R);
+    % normalize center matrix
+    nrm = trace(C * C');
+    C = C / sqrt(nrm);
+    % compute MPS tensors
     AL = ncon({U', AL, U}, {[-1 1], [1 -2 2], [2 -3]});
     AR = ncon({V', AR, V}, {[-1 1], [1 -2 2], [2 -3]});
     AC = ncon({AL, C}, {[-1 -2 1], [1 -3]});
-    % renormalize MPS in mixed gauge (is it normal that this is necessary?)
-    nrm = ncon({AC, conj(AC)}, {[1 2 3], [1 2 3]});
-    AC = AC / sqrt(nrm);
 end
 
 %% expectation values of on- and two-site operators in uniform and mixed gauge
@@ -580,17 +580,14 @@ function [AL, AR, AC, C] = MinAcC(ACprime, Cprime)
     [UlAC, ~] = poldec(reshape(ACprime, [D*d, D]));
     [UlC, ~] = poldec(Cprime);
     AL = reshape(UlAC*UlC', [D d D]);
-%     % right polar decomposition -> gets stuck sometimes when using this
-%     [UrAC, ~] = poldec(reshape(ACprime, [D, D*d]).');    UrAC = UrAC.';
-%     [UrC, ~] = poldec(Cprime.');    UrC = UrC.';
-%     AR = reshape(UrC'*UrAC, [D d D]);
-    % alternative from Bram: compute new AR through rightOrthonormalize on new AL -> VUMPS always seems to converge using this; doesn't get stuck indefinitely
+    % alternative from Bram: compute new AR through rightOrthonormalize on new AL instead of using right polar decomp -> VUMPS always seems to converge using this; doesn't get stuck indefinitely
     [AR, ~, ~] = RightOrthonormalize(AL);
     % new AC and C were just given
     AC = ACprime;
     C = Cprime;
-    % normalize for mixed gauge -> doesn't seem to be necessary here, why??
-    nrm = ncon({AC, conj(AC)}, {[1 2 3], [1 2 3]});
+    % normalize for mixed gauge (doesn't seem necessary here)
+    nrm = trace(C*C');
     AC = AC / sqrt(nrm);
+    C = C / sqrt(nrm);
 end
 
