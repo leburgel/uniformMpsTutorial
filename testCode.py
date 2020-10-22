@@ -1,7 +1,4 @@
 from tutorialFunctions import *
-
-import cProfile
-pr = cProfile.Profile()
 ### A first test case for the gradient in python
 D = 6
 d = 3
@@ -26,23 +23,14 @@ varA = np.concatenate((ReA.reshape(-1), ImA.reshape(-1)))
 
 
 
-if False:
+if True:
+    #pr.enable()
     EnergyHandle = partial(energyWrapper, H, D, d)
     res = minimize(EnergyHandle, varA, jac=True)
     Aopt = res.x
     print(res.fun)
+    #pr.disable()
+    # pr.print_stats()
 
-import scipy.io
-mat = scipy.io.loadmat('opt_D=12.mat')
 
-Aopt = mat['Aopt']
-E = mat['e']
-G = mat['g']
-pr.enable()
-e, g = energyDensity(Aopt, H)
-print(e, E)
-print(' energies close ', np.allclose(e, E, atol=1e-2))
-print(' gradients close', np.allclose(g, G, rtol=.05))
-# print(g, G)
-pr.disable()
-# pr.print_stats()
+
