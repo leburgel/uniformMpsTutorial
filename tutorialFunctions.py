@@ -330,9 +330,10 @@ def leftHandle_(A, r, l, v):
     # returns a vector of dimension D**2 (bottom - top)
 
     D = r.shape[0]
-    v_T = leftHandle(A,v)
-    v_rl = np.einsum('ji,ij,kl-> kl', v.reshape((D,D)), r, l)
+    v_T = leftHandle(A, v)
+    v_rl = np.einsum('ji,ij,kl-> kl', v.reshape((D, D)), r, l)
     return v - v_T + np.reshape(v_rl, D**2)
+
 
 def rightHandle_(A, r, l, v):
     # function that implements the action of 1-T + outer(r,l)
@@ -344,6 +345,7 @@ def rightHandle_(A, r, l, v):
     v_rl = np.einsum('kl,ji,ij-> kl', r, l, v.reshape((D,D)))
     return v - v_T + np.reshape(v_rl, D**2)
 
+
 def Gradient(H, A, l, r):
     # a rank 3 tensor, equation (116) in the notes
     # consists of 4 terms
@@ -352,13 +354,18 @@ def Gradient(H, A, l, r):
     # create function handle instead of D**2 matrix
     D = A.shape[0]
 
-    transfer_Left = LinearOperator((D**2,D**2), matvec=partial(leftHandle_, A, r, l))
+    transfer_Left = LinearOperator((D**2, D**2), matvec=partial(leftHandle_, A, r, l))
     x = np.einsum('ijk,klm,jlqo,rqp,pon,ri->mn', A, A, H, np.conj(A), np.conj(A), l)
-    Lh = gmres(transfer_Left, x)
+    x = np.reshape(x, D**2)
+    Lh = gmres(transfer_Left, x)[0]
+
     transfer_Right = LinearOperator((D**2,D**2), matvec=partial(rightHandle_, A, r, l))
     x = np.einsum('ijk,klm,jlqo,rqp,pon,mn->ri', A, A, H, np.conj(A), np.conj(A), r)
-    Rh = gmres(transfer_Right, x)
-    
+    x = np.reshape(x, D**2)
+    Rh = gmres(transfer_Right, x.reshape(D**2))[0]
+
+    Lh = np.reshape(Lh, (D, D))
+    Rh = np.reshape(Rh, (D, D))
     ###########
     #FIRST TERM
     ###########
@@ -371,12 +378,12 @@ def Gradient(H, A, l, r):
     ###########
     #THIRD TERM
     ###########
-    third = np.einsum('mi,ijk,kl->mjl',l, A, Rh)
+    third = np.einsum('mi,ijk,kl->mjl', l, A, Rh)
 
     ###########
     #FOURTH TERM
     ###########
-    fourth = np.einsum('mi,ijk,kl->mjl',Lh, A, r)
+    fourth = np.einsum('mi,ijk,kl->mjl', Lh, A, r)
 
     # define Lh and Rh
     return first+second+third+fourth
@@ -392,22 +399,22 @@ def energyDensity(A, H):
     g = Gradient(Htilde, A, l, r)
     return e, g
 
-def energyWrapper(varA, H, D, d):
-    Areal = (varA[:D^2*d]).reshape(D, d, D)
-    Acomplex = (varA[D^2*d:]).reshape(D, d, D)
+def energyWrapper(H, D, d, varA):
+    Areal = (varA[:D**2 *d]).reshape(D, d, D)
+    Acomplex = (varA[D**2*d:]).reshape(D, d, D)
     A = Areal + 1j*Acomplex
     e, _ = energyDensity(A, H)
     return e
 
 #hier wel nog wat werk denk ik
-def gradientWrapper(varA, H, D, d):
+def gradientWrapper(H, D, d, varA):
     _, g = energyDensity(A, H)
     #extra haakjes om real(g) en imag(g) in tuple te plaatsen voor concate anders error !!!
     g = np.concatenate((np.real(g).reshape(-1), np.imag(g).reshape(-1)))
     return g
 
 ### A first test case for the gradient in python
-D = 12
+D = 4
 d = 3
 
 H = Heisenberg(-1,-1,-1,0)
@@ -416,7 +423,7 @@ A = createMPS(D,d)
 ReA = np.real(A)
 ImA = np.imag(A)
 
-#extra haakjes om real(g) en imag(g) in tuple te plaatsen voor concate anders error !!!
+# extra haakjes om real(g) en imag(g) in tuple te plaatsen voor concate anders error !!!
 varA = np.concatenate((ReA.reshape(-1), ImA.reshape(-1)))
 
 EnergyHandle = partial(energyWrapper, H, D, d)
@@ -424,3 +431,4 @@ gradientHandle = partial(gradientWrapper, H, D, d)
 
 res = minimize(EnergyHandle, varA, jac=gradientHandle)
 Aopt = res.x
+print(res.fun)
