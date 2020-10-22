@@ -237,7 +237,9 @@ ImA = rand(D, d, D);
 varA = [reshape(ReA, [], 1); reshape(ImA, [], 1)];
 EnergyHandle = @(varA) EnergyWrapper(varA, h, D, d);
 options = optimoptions('fminunc', 'SpecifyObjectiveGradient', true);
+tic
 [Aopt, e] = fminunc(EnergyHandle, varA, options);
+toc
 Aopt = complex(reshape(Aopt(1:D^2*d), [D d D]), reshape(Aopt(D^2*d+1:end), [D d D]));
 [Aopt, l, r] = NormalizeMPS(Aopt);
 ArrayIsEqual(e, ExpvTwoSiteUniform(Aopt, l, r, h), tol) % just to be extra sure...
@@ -246,7 +248,7 @@ ArrayIsEqual(e, ExpvTwoSiteUniform(Aopt, l, r, h), tol) % just to be extra sure.
 
 %% Variational optimization of spin-1 Heisenberg Hamiltonian with VUMPS
 % tolerance for VUMPS algorithm
-tol = 1e-4;
+tol = 1e-3;
 % coupling strengths
 Jx = -1; Jy = -1; Jz = -1; hz = 0;
 % Heisenberg Hamiltonian
@@ -256,6 +258,7 @@ A = randcomplex(D, d, D); % initialize random MPS tensor
 [AL, AR, AC, C] = MixedCanonical(A); % go to mixed gauge
 flag = true;
 delta = 1e-4;
+tic
 while flag
     e = real(ExpvTwoSiteMixed(AC, AL, h)); % current energy density
     htilde = h - e * ncon({eye(d), eye(d)}, {[-1 -3], [-2 -4]}); % regularized energy density
@@ -269,9 +272,12 @@ while flag
         flag = false;
     end 
 end
+toc
 
 % converging and finding correct energy for antiferromagnet
 % convergence seems a bit slow, why?
+
+%% VUMPS for 2d classical Ising model
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -490,7 +496,6 @@ function Rh = RightEnvMixed(AR, C, htilde, delta)
         [2 3 7 5]});
     % for regularizing right transfer matrix: left fixed point is C'*C
     handleR = @(v) reshape(reshape(v, [D D]) - ncon({reshape(v, [D D]), AR, conj(AR)}, {[1 3], [-1 2 1], [-2 2 3]}) + trace((C'*C)*reshape(v, [D D])) * eye(D), [], 1);
-%     Rh = reshape(gmres(handleR, reshape(xR, [], 1)), [D D]); % fixed tolerance
     Rh = reshape(gmres(handleR, reshape(xR, [], 1), [], delta/10), [D D]); % variable tolerance
 end
 
@@ -504,7 +509,6 @@ function Lh = LeftEnvMixed(AL, C, htilde, delta)
         [2 3 5 7]});
     % for regularizing right left matrix: right fixed point is C*C'
     handleL = @(v) reshape(reshape(v, [D D]) - ncon({reshape(v, [D D]), AL, conj(AL)}, {[3 1], [1 2 -2], [3 2 -1]}) + trace(reshape(v, [D D])*(C*C')) * eye(D), [], 1);
-%     Lh = reshape(gmres(handleL, reshape(xL, [], 1)), [D D]); % fixed tolerance
     Lh = reshape(gmres(handleL, reshape(xL, [], 1), [], delta/10), [D D]); % variable tolerance
 end
 
@@ -552,10 +556,6 @@ function [ACprime, Cprime] = CalculateNewCenter(AL, AR, AC, C, Lh, Rh, htilde, d
     handleAC = @(v) reshape(H_AC(reshape(v, [D d D]), AL, AR, Rh, Lh, htilde), [], 1);
     handleC = @(v) reshape(H_C(reshape(v, [D D]), AL, AR, Rh, Lh, htilde), [], 1);
     % solve eigenvalue problem using 'smallest real' option
-%     [ACprime, ~] = eigs(handleAC, D^2*d, 1, 'smallestreal', 'StartVector', reshape(AC, [], 1)); % fixed tolerance
-%     ACprime = reshape(ACprime, [D d D]);
-%     [Cprime, ~] = eigs(handleC, D^2, 1, 'smallestreal', 'StartVector', reshape(C, [], 1)); % fixed tolerance
-%     Cprime = reshape(Cprime, [D D]);
     [ACprime, ~] = eigs(handleAC, D^2*d, 1, 'smallestreal', 'Tolerance', delta/10, 'StartVector', reshape(AC, [], 1)); % variable tolerance
     ACprime = reshape(ACprime, [D d D]);
     [Cprime, ~] = eigs(handleC, D^2, 1, 'smallestreal', 'Tolerance', delta/10, 'StartVector', reshape(C, [], 1)); % variable tolerance
@@ -565,24 +565,19 @@ end
 function [AL, AR, AC, C] = MinAcC(ACprime, Cprime)
     % algorithm 5 from lecture notes, but adapted so that AR and AL are related properly for regularization of left and right transfer matrix
     D = size(ACprime, 1); d = size(ACprime, 2);
-    % left polar decomositions
+    % left polar decomosition
     [UlAC, ~] = poldec(reshape(ACprime, [D*d, D]));
     [UlC, ~] = poldec(Cprime);
     AL = reshape(UlAC*UlC', [D d D]);
-    % right polar decomositions
-    [UrAC, ~] = poldec(reshape(ACprime, [D, D*d]).');    UrAC = UrAC.';
-    [UrC, ~] = poldec(Cprime.');    UrC = UrC.';
-    AR = reshape(UrC'*UrAC, [D d D]);
-%     % alternative from Bram: compute new AR through rightOrthonormalize on new AL -> VUMPS converges regardless of whether we do it this way or with right polar decomp
-%     [AR, ~, ~] = RightOrthonormalize(AL);
+%     % right polar decomosition -> gets stuck sometimes when using this
+%     [UrAC, ~] = poldec(reshape(ACprime, [D, D*d]).');    UrAC = UrAC.';
+%     [UrC, ~] = poldec(Cprime.');    UrC = UrC.';
+%     AR = reshape(UrC'*UrAC, [D d D]);
+    % alternative from Bram: compute new AR through rightOrthonormalize on new AL -> VUMPS always seems to converge using this; doesn't get stuck indefinitely
+    [AR, ~, ~] = RightOrthonormalize(AL);
     % new AC and C were just given
     AC = ACprime;
     C = Cprime;
-%     % do we need to diagonalize C using the SVD thing again? -> VUMPS doesn't converge if we do this, probably because it messes with AC
-%     [U, C, V] = svd(Cprime);
-%     AL = ncon({U', AL, U}, {[-1 1], [1 -2 2], [2 -3]});
-%     AR = ncon({V', AR, V}, {[-1 1], [1 -2 2], [2 -3]});
-%     AC = ncon({AL, C}, {[-1 -2 1], [1 -3]});
     % normalize for mixed gauge -> doesn't seem to be necessary here, why??
     nrm = ncon({AC, conj(AC)}, {[1 2 3], [1 2 3]});
     AC = AC / sqrt(nrm);
