@@ -363,7 +363,7 @@ def oneSiteUniform(O, A, l, r):
 
 def oneSiteMixed(O, Ac):
     # determine expectation value of one-body operator in mixed gauge
-    ncon((Ac, np.conj(Ac), O), ([1, 2, 3], [1, 4, 3], [2, 4]), order=[2, 1, 3, 4])
+    return ncon((Ac, np.conj(Ac), O), ([1, 2, 3], [1, 4, 3], [2, 4]), order=[2, 1, 3, 4])
 
 
 def twoSiteUniform(O, A, l, r):
