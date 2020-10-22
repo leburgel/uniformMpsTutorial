@@ -208,16 +208,7 @@ expv2_2 = ncon({AL, AC, conj(AL), conj(AC), O2}, {...
 checkExpv2 = ArrayIsEqual(expv2_1, expv2_2, tol);
 
 
-<<<<<<< HEAD
-%% Variational optimization of two-site Heisenberg interaction through naive gradient descent
-
-% spin-1 angular momentum operators
-Sx = [0 1 0; 1 0 1; 0 1 0]/ sqrt(2);
-Sy = [0 -1 0; 1 0 -1; 0 1 0] * 1i/sqrt(2);
-Sz = [1 0 0; 0 0 0; 0 0 -1];
-=======
 %% Variational optimization of spin-1 Heisenberg Hamiltonian with gradient descent in uniform gauge
->>>>>>> 7eb2d10b6c82640348f644b613c10d460b10c598
 
 % coupling strengths
 Jx = -1; Jy = -1; Jz = -1; hz = 0; % Heisenberg antiferromagnet
@@ -574,11 +565,11 @@ end
 function [AL, AR, AC, C] = MinAcC(ACprime, Cprime)
     % algorithm 5 from lecture notes, but adapted so that AR and AL are related properly for regularization of left and right transfer matrix
     D = size(ACprime, 1); d = size(ACprime, 2);
-    % left polar decomosition
+    % left polar decomposition
     [UlAC, ~] = poldec(reshape(ACprime, [D*d, D]));
     [UlC, ~] = poldec(Cprime);
     AL = reshape(UlAC*UlC', [D d D]);
-%     % right polar decomosition -> gets stuck sometimes when using this
+%     % right polar decomposition -> gets stuck sometimes when using this
 %     [UrAC, ~] = poldec(reshape(ACprime, [D, D*d]).');    UrAC = UrAC.';
 %     [UrC, ~] = poldec(Cprime.');    UrC = UrC.';
 %     AR = reshape(UrC'*UrAC, [D d D]);
