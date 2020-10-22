@@ -298,31 +298,25 @@ def entanglementSpectrum(aL, aR, L, R, truncate=0):
 
     return aLU, aRV, S, entropy
 
-def CreateSx():
-    out = np.zeros((3,3))
-    out[0,1] = 1
-    out[1,2] = 1
-    return (out+out.T)/np.sqrt(2)
-
-def CreateSy():
-    out = np.zeros((3,3), dtype=np.complex64)
-    out[0,1] = -1j
-    out[1,2] = -1j
-    return (out+np.conj(out.T))/np.sqrt(2)
 
 
-def CreateSz():
-    out = np.zeros((3,3))
-    out[0,0] = 1
-    out[2,2] = -1
-    return out
-
-
-def Heisenberg(Jx,Jy,Jz,h):
-    Sx, Sy, Sz = CreateSx(), CreateSy(), CreateSz()
+def Heisenberg(Jx, Jy, Jz, h):
+    """
+    Function to implement spin 1 Heisenberg hamiltonian
+    :param Jx: coupling in x-direction
+    :param Jy: coupling in y-direction
+    :param Jz: coupling in z-direction
+    :param h: magnetic coupling
+    :return: H: (3, 3, 3, 3) tensor (top left, top right, bottom left, bottom right)
+    """
+    Sx = np.array([[0, 1, 0], [1, 0, 1], [0, 1, 0]]) / np.sqrt(2)
+    Sy = np.array([[0, 1, 0], [-1, 0, 1], [0, -1, 0]]) * 1.0j /np.sqrt(2)
+    Sz = np.array([[1, 0, 0], [0, 0, 0], [0, 0, -1]])
     I = np.identity(3)
-    return -Jx*np.einsum('ij,kl->ijkl', Sx, Sx)-Jy*np.einsum('ij,kl->ijkl',Sy, Sy)-Jz*np.einsum('ij,kl->ijkl', Sz, Sz) \
-            - h*np.einsum('ij,kl->ijkl', I, Sz) - h*np.einsum('ij,kl->ijkl', Sz, I)
+
+    return -Jx*np.einsum('ij,kl->ikjl', Sx, Sx)-Jy*np.einsum('ij,kl->ikjl',Sy, Sy)-Jz*np.einsum('ij,kl->ikjl', Sz, Sz) \
+            - h*np.einsum('ij,kl->ikjl', I, Sz) - h*np.einsum('ij,kl->ikjl', Sz, I)
+
 
 
 def oneSiteUniform(O, A, l, r):
@@ -447,16 +441,40 @@ def Gradient(H, A, l, r):
 
     # define Lh and Rh
     return first+second+third+fourth
-    
-def energyDensity(A, H):
+
+
+def energyDensity(A, h):
+    """
+    Function to calculate energy density and gradient of MPS A with, using Hamiltonian H
+    :param A: MPS tensor (D, d, D)
+    :param h: Hamiltonian operator (d, d, d, d)
+    :return e: Energy density (real scalar)
+    :return g: Gradient of energy density evaluated @A
+    """
+
     d = A.shape[1]
+
+    # normalise the input MPS
     A = normaliseMPS(A)
-    l = leftFixedPoint(A)
-    r = rightFixedPoint(A)
-    e = np.real(twoSiteUniform(H, A, l, r))
-    eOp = e * np.einsum("ik,jl->ijkl", np.identity(d), np.identity(d))
-    Htilde = H - eOp
-    g = Gradient(Htilde, A, l, r)
+
+    # calculate fixed points
+    l, r = leftFixedPoint(A), rightFixedPoint(A)
+    l, r = normaliseFixedPoints(l, r)
+
+    # calculate energy density
+    e = twoSiteUniform(h, A, l, r)
+
+    # check if real!
+    if np.imag(e) > 1e-10:
+        print("complex energy? ", e)
+    e = np.real(e)
+
+    # renormalise Hamiltonian
+    hTilde = h - e * np.einsum("ik,jl->ijkl", np.identity(d), np.identity(d))
+
+    # calculate gradient
+    g = Gradient(hTilde, A, l, r)
+
     return e, g
 
 def energyWrapper(H, D, d, varA):
