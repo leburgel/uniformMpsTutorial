@@ -408,23 +408,24 @@ def energyWrapper(H, D, d, varA):
     Areal = (varA[:D**2 *d]).reshape(D, d, D)
     Acomplex = (varA[D**2*d:]).reshape(D, d, D)
     A = Areal + 1j*Acomplex
-    e, _ = energyDensity(A, H)
-    return e
+    e, g = energyDensity(A, H)
+    g = np.concatenate((np.real(g).reshape(-1), np.imag(g).reshape(-1)))
+    return e, g
 
 #hier wel nog wat werk denk ik
 def gradientWrapper(H, D, d, varA):
     _, g = energyDensity(A, H)
     #extra haakjes om real(g) en imag(g) in tuple te plaatsen voor concate anders error !!!
-    g = np.concatenate((np.real(g).reshape(-1), np.imag(g).reshape(-1)))
+
     return g
 
 ### A first test case for the gradient in python
-D = 6
+D = 8
 d = 3
 
-H = Heisenberg(-1, -1, -1, 0)
+H = Heisenberg(1, 1, 1, 0)
 
-A = createMPS(D,d)
+A = createMPS(D, d)
 ReA = np.real(A)
 ImA = np.imag(A)
 
@@ -442,6 +443,6 @@ varA = np.concatenate((ReA.reshape(-1), ImA.reshape(-1)))
 EnergyHandle = partial(energyWrapper, H, D, d)
 gradientHandle = partial(gradientWrapper, H, D, d)
 
-res = minimize(EnergyHandle, varA, jac=gradientHandle)
+res = minimize(EnergyHandle, varA, jac=True)
 Aopt = res.x
 print(res.fun)
