@@ -267,6 +267,7 @@ while flag
     [ACprime, Cprime] = CalculateNewCenter(AL, AR, AC, C, Rh, Lh, htilde, delta);
     [ALprime, ARprime, ACprime, Cprime] = MinAcC(ACprime, Cprime);
     delta = ArrayNorm(H_AC(AC, AL, AR, Rh, Lh, htilde) - ncon({AL, H_C(C, AL, AR, Rh, Lh, htilde)}, {[-1 -2 1], [1 -3]})); % calculate error using new or old AL, AR, Rh, Lh? now using old...
+    delta
     AL = ALprime; AR = ARprime; AC = ACprime; C = Cprime; % update
     if delta < tol
         flag = false;
