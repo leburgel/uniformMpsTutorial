@@ -4,7 +4,7 @@
 
 tol = 1e-12;
 
-D = 12;
+D = 6;
 d = 3;
 
 A = randcomplex(D, d, D); % MPS tensor
@@ -273,12 +273,22 @@ while flag
     end 
 end
 toc
+[U, C, V] = svd(C);
+
+svals = diag(C);
+
+plot(svals, 'd');
+
 
 % converging and finding correct energy for antiferromagnet
 % convergence seems a bit slow, why?
 
 %% VUMPS for 2d classical Ising model
 
+%% tst
+tic
+[e, g] = EnergyDensity(A, h);
+toc
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 %% function definitions
@@ -415,7 +425,7 @@ function h = HeisenbergHamiltonian(Jx, Jy, Jz, hz)
     % spin-1 angular momentum operators
     Sx = [0 1 0; 1 0 1; 0 1 0] / sqrt(2);
     Sy = [0 -1 0; 1 0 -1; 0 1 0] * 1i / sqrt(2);
-    Sz = [1 0 0; 0 0 0; 0 0 -1];
+    Sz = [1 0 0; 0 0 0; 0 0 -1]; 
     % Heisenberg Hamiltonian
     h = -Jx*ncon({Sx, Sx}, {[-1 -3], [-2 -4]}) - Jy*ncon({Sy, Sy}, {[-1 -3], [-2 -4]}) - Jz*ncon({Sz, Sz}, {[-1 -3], [-2 -4]})...
             - hz*ncon({Sz, eye(3)}, {[-1 -3], [-2 -4]}) - hz*ncon({eye(3), eye(3)}, {[-1 -3], [-2 -4]});

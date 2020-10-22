@@ -26,9 +26,9 @@ varA = np.concatenate((ReA.reshape(-1), ImA.reshape(-1)))
 
 
 
-if False:
+if True:
     EnergyHandle = partial(energyWrapper, H, D, d)
-    res = minimize(EnergyHandle, varA, jac=True)
+    res = minimize(EnergyHandle, varA, jac=True,tol=1e-4)
     Aopt = res.x
     print(res.fun)
 
@@ -41,8 +41,8 @@ G = mat['g']
 pr.enable()
 e, g = energyDensity(Aopt, H)
 print(e, E)
-print(' energies close ', np.allclose(e, E, atol=1e-2))
-print(' gradients close', np.allclose(g, G, atol=1e-1))
+print(' energies close ', np.allclose(e, E, rtol=1e-5))
+print(' gradients close', np.allclose(2*g, G, rtol=1e-2))
 # print(g, G)
 pr.disable()
-# pr.print_stats()
+pr.print_stats()

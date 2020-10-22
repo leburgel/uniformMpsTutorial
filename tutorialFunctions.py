@@ -403,7 +403,7 @@ def rightHandle(A, v):
     # on a right vector of dimension D**2 v (top - bottom)
     # returns a vector of dimension D**2 (top - bottom)
 
-    D = A.shape[2]
+    D = A.shape[0]
 
     # contraction sequence: contract A with v, then with Abar
     newV = np.einsum('ijk,kl->ijl', A, v.reshape((D,D)))
@@ -430,9 +430,9 @@ def leftHandle_(A, r, l, v):
     # on a left vector of dimension D**2 v (bottom - top)
     # returns a vector of dimension D**2 (bottom - top)
 
-    D = r.shape[0]
+    D = A.shape[0]
     v_T = leftHandle(A, v)
-    v_rl = np.einsum('ji,ij,kl-> kl', v.reshape((D, D)), r, l)
+    v_rl = np.trace(v.reshape((D, D))@r) * l
     return v - v_T + np.reshape(v_rl, D**2)
 
 
@@ -441,13 +441,13 @@ def rightHandle_(A, r, l, v):
     # on a left vector of dimension D**2 v (bottom - top)
     # returns a vector of dimension D**2 (bottom - top)
 
-    D = r.shape[0]
+    D = A.shape[0]
     v_T = rightHandle(A,v)
-    v_rl = np.einsum('kl,ji,ij-> kl', r, l, v.reshape((D,D)))
+    v_rl = np.trace(l@v.reshape((D,D))) * r
     return v - v_T + np.reshape(v_rl, D**2)
 
 
-def Gradient(H, A, l, r):
+def energyGradient(H, A, l, r):
     """
     Function to determine the gradient of H @MPS A
     :param H: (d, d, d, d) hamiltonian density operator
@@ -465,13 +465,13 @@ def Gradient(H, A, l, r):
     D = A.shape[0]
     path1 = 'einsum_path', (0, 5), (0, 1, 2, 3, 4)
     transfer_Left = LinearOperator((D**2, D**2), matvec=partial(leftHandle_, A, r, l))
-    x = np.einsum('ijk,klm,jlqo,rqp,pon,ri->mn', A, A, H, np.conj(A), np.conj(A), l, optimize=path1)
+    x = np.einsum('ijk,klm,jlqo,rqp,pon,ri->nm', A, A, H, np.conj(A), np.conj(A), l, optimize=path1)
     x = np.reshape(x, D**2)
     Lh = gmres(transfer_Left, x)[0]
 
     path2 = 'einsum_path', (1, 5), (0, 1, 2, 3, 4)
     transfer_Right = LinearOperator((D**2, D**2), matvec=partial(rightHandle_, A, r, l))
-    x = np.einsum('ijk,klm,jlqo,rqp,pon,mn->ri', A, A, H, np.conj(A), np.conj(A), r, optimize=path2)
+    x = np.einsum('ijk,klm,jlqo,rqp,pon,mn->ir', A, A, H, np.conj(A), np.conj(A), r, optimize=path2)
     x = np.reshape(x, D**2)
     Rh = gmres(transfer_Right, x.reshape(D**2))[0]
 
@@ -515,11 +515,7 @@ def energyDensity(A, h):
     d = A.shape[1]
 
     # normalise the input MPS
-    A = normaliseMPS(A)
-
-    # calculate fixed points
-    l, r = leftFixedPoint(A), rightFixedPoint(A)
-    l, r = normaliseFixedPoints(l, r)
+    A, l, r = normaliseMPS(A)
 
     # calculate energy density
     e = twoSiteUniform(h, A, l, r)
@@ -533,7 +529,7 @@ def energyDensity(A, h):
     hTilde = h - e * np.einsum("ik,jl->ijkl", np.identity(d), np.identity(d))
 
     # calculate gradient
-    g = Gradient(hTilde, A, l, r)
+    g = energyGradient(hTilde, A, l, r)
 
     return e, g
 
