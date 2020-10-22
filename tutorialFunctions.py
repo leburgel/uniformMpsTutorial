@@ -506,7 +506,7 @@ def Gradient(H, A, l, r):
     fourth = np.einsum('mi,ijk,kl->mjl', Lh, A, r)
 
     # define Lh and Rh
-    return first+second+third+fourth
+    return 2 * (first+second+third+fourth)
 
 
 def energyDensity(A, h):
@@ -521,11 +521,7 @@ def energyDensity(A, h):
     d = A.shape[1]
 
     # normalise the input MPS
-    A = normaliseMPS(A)
-
-    # calculate fixed points
-    l, r = leftFixedPoint(A), rightFixedPoint(A)
-    l, r = normaliseFixedPoints(l, r)
+    A, l, r = normaliseMPS(A)
 
     # calculate energy density
     e = twoSiteUniform(h, A, l, r)
