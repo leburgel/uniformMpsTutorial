@@ -1,7 +1,5 @@
 import numpy as np
-from scipy.linalg import rq
-from scipy.linalg import qr
-from scipy.linalg import svd
+from scipy.linalg import rq, qr, svd, polar
 from scipy.sparse.linalg import eigs, LinearOperator, gmres
 from scipy.optimize import minimize
 from functools import partial
@@ -495,3 +493,144 @@ def energyWrapper(H, D, d, varA):
     e, g = energyDensity(A, H)
     g = np.concatenate((np.real(g).reshape(-1), np.imag(g).reshape(-1)))
     return e, g
+
+#### functions for vumps
+
+# right environment vumps
+def RightEnvMixed(Ar, C, hTilde):
+    '''
+    :param Ar:
+    :param L:
+    :param R:
+    :param hTilde:
+    :return:
+    '''
+    D = Ar.shape[0]
+    xR = np.einsum("ijk,klm,nop,pqm,jloq->in", Ar, Ar, np.conj(Ar), np.conj(Ar), hTilde)
+    handleR = lambda v: (v.reshape(D, D) - np.einsum("ij,kli,mlj->km", v.reshape(D, D), Ar, np.conj(Ar))\
+                        + np.trace((np.conj(C).T @ C) @ v.reshape(D, D)) * np.identity(D)).reshape(-1)
+    Rh = gmres(handleR, xR.reshape(-1))[0]
+    Rh = Rh.reshape(D, D)
+
+    return Rh
+
+#left environment vumps
+def LeftEnvMixed(Al, C, hTilde):
+    '''
+
+    :param Al:
+    :param L:
+    :param R:
+    :param hTilde:
+    :return:
+    '''
+    D = Al.shape[0]
+    xL = np.einsum("ijk,klm,ino,opq,jlnp->qm", Al, Al, np.conj(Al), np.conj(Al), hTilde)
+    handleL = lambda v: (v.reshape(D, D) - np.einsum("ij,jkl,ikm->ml", v.reshape(D, D), Al, np.conj(Al))\
+                        + np.trace(v.reshape(D, D) @ (C @ np.conj(C).T)) * np.identity(D)).reshape(-1)
+    Lh = (gmres(handleL, xL.reshape(-1))[0]).reshape(D, D)
+
+    return Lh
+
+def hAc(v, Al, Ar, Rh, Lh, hTilde):
+    '''
+
+    :param v:
+    :param Al:
+    :param Ar:
+    :param Rh:
+    :param Lh:
+    :param hTilde:
+    :return:
+    '''
+    centerTerm1 = np.einsum("ijk,klm,ino,jlnp->opm", Al, v, np.conj(A_l).T, hTilde)
+    centerTerm2 = np.einsum("ijk,klm,nom,jlpo->ipn", v, Ar, np.conj(Ar), hTilde)
+    leftEnvTerm = np.einsum("ij,jkl -> ikl", Lh, v)
+    rightEnvTerm = np.einsum("ijk,kl->ijl", v, Rh)
+
+    return centerTerm1 + centerTerm2 + leftEnvTerm + rightEnvTerm
+
+def hC(v, Al, Ar, Rh, Lh, hTilde):
+    '''
+
+    :param v:
+    :param Al:
+    :param Ar:
+    :param Rh:
+    :param Lh:
+    :param hTilde:
+    :return:
+    '''
+    centerTerm = np.einsum("ijk,kl,lmn,iop,qrn,jmor->pq", Al, v, Ar, np.conj(Al), np.conj(Ar), hTilde)
+    leftEnvTerm = Lh @ v
+    rightEnvTerm = v @ Rh
+
+    return centerTerm + leftEnvTerm + rightEnvTerm
+
+def calcNewCenter(Al, Ar, C, Lh, Rh, hTilde):
+    '''
+
+    :param Al:
+    :param Ar:
+    :param L:
+    :param R:
+    :param Lh:
+    :param Rh:
+    :param hTilde:
+    :return:
+    '''
+
+    D = Al.shape[0]
+    d = Al.shape[1]
+    Ac = np.einsum("ijk,kl->ijl", Al, C)
+    handleAc = lambda v: (hAc(v.reshape(D, d, D), Al, Ar, Rh, Lh, hTilde)).reshape(-1)
+    handleC = lambda v: (hC(v.reshape(D, D), Al, Ar, Rh, Lh, hTilde)).reshape(-1)
+    _, AcPrime = eigs(handleAc,k=1,which = "SR", v0=Ac.reshape(-1))
+    AcPrime = AcPrime.reshape(D, d, D)
+    _, cPrime = eigs(handleC,k=1,which = "SR", v0=C.reshape(-1))
+    cPrime = cPrime.reshape(D, D)
+    return AcPrime, cPrime
+
+def minAcC(AcPrime, cPrime):
+    '''
+
+    :param AcPrime:
+    :param cPrime:
+    :return:
+    '''
+
+    D = AcPrime.shape[0]
+    d = AcPrime.shape[1]
+    UlAc, _ = polar(AcPrime.reshape(D*d,D))
+    UlC, _ = polar(cPrime)
+    Al = (UlAc @ np.conj(UlC).T).reshape(D, d, D)
+    _, Ar = rightOrthonormal(Al)
+    Ac = AcPrime
+    C = cPrime
+    norm = np.einsum("ijk,ijk", Ac, np.conj(Ac))
+    Ac /= np.sqrt(norm)
+    return Al, Ar, Ac, C
+
+###### VUMPS test Heisenberg antiferromagnet
+
+tol = 1e-3
+D = 4
+d = 3
+h = Heisenberg(1, -1, 1, 0)
+A = createMPS(D, d)
+A = normaliseMPS(A)
+L, Al = leftOrthonormal(A)
+R, Ar = rightOrthonormal(A)
+C = L @ R
+Ac = np.einsum("ijk,kl->ijl", Al, C)
+flag = 1
+
+######## some problems with calculating Rh and Lh here
+while flag < 100:
+    e = np.real(twoSiteMixed(h, Ac, Ar))
+    hTilde = h - e * np.einsum("ik,jl->ijkl", np.identity(d), np.identity(d))
+    Rh = RightEnvMixed(Ar, C, hTilde)
+    Lh = LeftEnvMixed(Al, C, hTilde)
+    AcPrime, cPrime = calcNewCenter(Al, Ar, C, Lh, Rh, hTilde)
+    AlPrime, ArPrime, AcPrime, cPrime = minAcC(AcPrime, cPrime)
+    flag += 1
