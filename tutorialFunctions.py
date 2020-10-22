@@ -81,7 +81,7 @@ def normaliseFixedPoints(l, r):
     return l/norm, r/norm
 
 
-def normaliseMPS(A, l, r):
+def normaliseMPS(A):
     """
     Function to normalise a given MPS tensor using O(D^3) algorithm
     input: A --- (D, d, D) MPStensor
@@ -172,7 +172,7 @@ def leftOrthonormal(A, L0=None, tol=1e-14, maxIter=1e5):
     i = 1
 
     # Random guess for L0 if none specified
-    if not L0:
+    if L0 is None:
         L0 = np.random.rand(D, D)
 
     # Normalise L0
@@ -221,7 +221,7 @@ def rightOrthonormal(A, R0=None, tol=1e-14, maxIter=1e5):
     i = 1
 
     # Random guess for  R0 if none specified
-    if not R0:
+    if R0 is None:
         R0 = np.random.rand(D, D)
 
     # Normalise R0
@@ -271,11 +271,11 @@ def mixedCanonical(A, L0=None, R0=None, tol=1e-14, maxIter=1e5):
     D = A.shape[0]
 
     # Random guess for  L0 if none specified
-    if not L0:
+    if L0 is None:
         L0 = np.random.rand(D, D)
 
     # Random guess for  R0 if none specified
-    if not R0:
+    if R0 is None:
         R0 = np.random.rand(D, D)
     
     # Compute left and right orthonormal forms
@@ -286,15 +286,12 @@ def mixedCanonical(A, L0=None, R0=None, tol=1e-14, maxIter=1e5):
     C = L @ R
     
     # singular value decomposition to diagonalise C
-    U, S, V = svd(C)
+    U, S, Vdag = svd(C)
     C = np.diag(S)
 
-    # # for well defined L and R, normalisation probably not necessary but just in case
-    # S = S / C[0]
-    
     # absorb corresponding unitaries in Al and Ar
     Al = np.einsum('ij,jkl,lm->ikm', np.conj(U).T, Al, U)
-    Ar = np.einsum('ij,jkl,lm->ikm', V, Ar, np.conj(V).T) # svd already gives V^dagger, so have to switch daggers here I think
+    Ar = np.einsum('ij,jkl,lm->ikm', Vdag, Ar, np.conj(Vdag).T)
 
     # compute center MPS tensor
     Ac = np.einsum('ijk,kl->ijl', Al, C)
