@@ -3,6 +3,7 @@ from scipy.linalg import rq, qr, svd, polar
 from scipy.sparse.linalg import eigs, LinearOperator, gmres
 from scipy.optimize import minimize
 from functools import partial
+from ncon import ncon
 
 
 def createMPS(bondDimension, physDimension):
@@ -30,12 +31,10 @@ def leftFixedPoint(A):
 
     D = A.shape[0]
 
-    # set optimal contraction sequence
-    path = ['einsum_path', (0, 2), (0, 1)]
-
-    # calculate transfer matrix handle and cast to LinearOperator
+    # construct transfer matrix handle and cast to LinearOperator
     transferLeftHandle = lambda v: np.reshape(
-        np.einsum('ijk,ljm,li->mk', A, np.conj(A), v.reshape((D, D)), optimize=path), D ** 2)
+        ncon((A, np.conj(A), v.reshape((D,D))), ([1, 2, -2], [3, 2, -1], [3, 1]))
+        , D**2)
     transferLeft = LinearOperator((D ** 2, D ** 2), matvec=transferLeftHandle)
 
     # calculate fixed point
@@ -54,12 +53,10 @@ def rightFixedPoint(A):
 
     D = A.shape[0]
 
-    # set optimal contraction sequence
-    path = ['einsum_path', (0, 2), (0, 1)]
-
-    # calculate transfer matrix handle and cast to LinearOperator
+    # construct transfer matrix handle and cast to LinearOperator
     transferRightHandle = lambda v: np.reshape(
-        np.einsum('ijk,ljm,km->il', A, np.conj(A), v.reshape((D, D)), optimize=path), D ** 2)
+        ncon((A, np.conj(A), v.reshape((D,D))), ([-1, 2, 1], [-2, 2, 3], [1, 3]))
+        , D ** 2)
     transferRight = LinearOperator((D ** 2, D ** 2), matvec=transferRightHandle)
 
     # calculate fixed point
@@ -73,7 +70,7 @@ def normaliseFixedPoints(l, r):
     # such that they trace to unity (interpretation as density matrix)
     # returns (l, r)
 
-    trace = np.einsum('ij,ji->', l, r)
+    trace = np.trace(l@r)
     # trace = np.trace(rhoL*rhoR) # might work as well/be faster than einsum?
     norm = np.sqrt(trace)
     return l/norm, r/norm
@@ -177,14 +174,14 @@ def leftOrthonormal(A, L0=None, tol=1e-14, maxIter=1e5):
     L0 = L0 / np.linalg.norm(L0)
 
     # Initialise loop
-    Al, L = qrPositive(np.resize(np.einsum('ik,ksj->isj', L0, A), (D * d, D)))
+    Al, L = qrPositive(np.reshape(ncon((L0, A), ([-1, 1], [1, -2, -3])), (D * d, D)))
     L = L / np.linalg.norm(L)
     convergence = np.linalg.norm(L - L0)
 
     # Decompose L*A until L converges
     while convergence > tol:
         # calculate LA and decompose
-        Al, Lnew = qrPositive(np.resize(np.einsum('ik,ksj->isj', L, A), (D * d, D)))
+        Al, Lnew = qrPositive(np.reshape(ncon((L, A), ([-1, 1], [1, -2, -3])), (D * d, D)))
 
         # normalise new L
         Lnew = Lnew / np.linalg.norm(Lnew)  # only necessary when working with unnormalised MPS?
@@ -199,7 +196,7 @@ def leftOrthonormal(A, L0=None, tol=1e-14, maxIter=1e5):
             break
         i += 1
 
-    return L, np.resize(Al, (D, d, D))
+    return L, Al.reshape((D, d, D))
 
 
 def rightOrthonormal(A, R0=None, tol=1e-14, maxIter=1e5):
@@ -226,14 +223,14 @@ def rightOrthonormal(A, R0=None, tol=1e-14, maxIter=1e5):
     R0 = R0 / np.linalg.norm(R0)
 
     # Initialise loop
-    R, Ar = lqPositive(np.resize(np.einsum('ijk,kl->ijl', A, R0), (D, D * d)))
+    R, Ar = lqPositive(np.reshape(ncon((A, R0), ([-1, -2, 1], [1, -3])), (D, D * d)))
     R = R / np.linalg.norm(R)
     convergence = np.linalg.norm(R - R0)
 
     # Decompose A*R until R converges
     while convergence > tol:
         # calculate AR and decompose
-        Rnew, Ar = lqPositive(np.resize(np.einsum('ijk,kl->ijl', A, R), (D, D * d)))
+        Rnew, Ar = lqPositive(np.reshape(ncon((A, R), ([-1, -2, 1], [1, -3])), (D, D * d)))
 
         # normalise new R
         Rnew = Rnew / np.linalg.norm(Rnew)  # only necessary when working with unnormalised MPS
@@ -288,31 +285,31 @@ def mixedCanonical(A, L0=None, R0=None, tol=1e-14, maxIter=1e5):
     C = np.diag(S)
 
     # absorb corresponding unitaries in Al and Ar
-    Al = np.einsum('ij,jkl,lm->ikm', np.conj(U).T, Al, U)
-    Ar = np.einsum('ij,jkl,lm->ikm', Vdag, Ar, np.conj(Vdag).T)
+    Al = ncon((np.conj(U).T, Al, U), ([-1, 1], [1, -2, 2], [2, -3]))
+    Ar = ncon((Vdag, Ar, np.conj(Vdag).T), ([-1, 1], [1, -2, 2], [2, -3]))
     
     # normalise center matrix
     nrm = np.trace(C @ np.conj(C).T)
     C /= np.sqrt(nrm);
 
     # compute center MPS tensor
-    Ac = np.einsum('ijk,kl->ijl', Al, C)
+    Ac = ncon((Al, C), ([-1, -2, 1], [1, -3]))
         
     return Al, Ar, Ac, C
 
 
-def entanglementSpectrum(aL, aR, L, R, truncate=0):
-    #aL and aR are left and right MPS tensors
-    #l and r bring A in left or right form respectively
+def entanglementSpectrum(Al, Ar, L, R, truncate=0):
+    #Al and Ar are left and right MPS tensors
+    #L and R bring A in left or right form respectively
     #find Schmidt coefficients
     #calculate bipartite entanglement entropy
     #apply truncation if desired
 
-    #center matrix c is matrix multiplication of l and r
+    #center matrix C is matrix multiplication of L and R
     C = L @ R
 
     #singular value decomposition
-    U,S,V = svd(C)
+    U, S , Vdag = svd(C)
 
     #for well defined l and r, normalisation probably not necessary but just in case
     S = S / S[0]
@@ -321,30 +318,24 @@ def entanglementSpectrum(aL, aR, L, R, truncate=0):
     if truncate:
         S = S[:truncate]
         U = U[:, :truncate]
-        V = V[:truncate, :]
+        Vdag = Vdag[:truncate, :]
 
-        #transform aL and aR through unitary
-        aLU = np.einsum('ij,jkl->ikl', np.conj(U).T, aL)
-        aLU = np.einsum('ikl,lm->ikm', aLU, U)
-        aRV = np.einsum('ij,jkl->ikl', V, aR)
-        aRV = np.einsum('ikl,lm->ikm', aRV, np.conj(V).T)
+    # absorb corresponding unitaries in Al and Ar
+    Al = ncon((np.conj(U).T, Al, U), ([-1, 1], [1, -2, 2], [2, -3]))
+    Ar = ncon((Vdag, Ar, np.conj(Vdag).T), ([-1, 1], [1, -2, 2], [2, -3]))
+    
+    # construct and normalise center matrix
+    C = np.diag(S)
+    nrm = np.trace(C @ np.conj(C).T)
+    C /= np.sqrt(nrm);
 
-        #calculate entropy through singular values
-        entropy = -np.sum(S ** 2 * np.log(S ** 2))
+    # compute center MPS tensor
+    Ac = ncon((Al, C), ([-1, -2, 1], [1, -3]))
 
-        return aLU, aRV, S, entropy
-
-    #transform aL and aR through unitary
-    aLU = np.einsum('ij,jkl->ikl', np.conj(U).T, aL)
-    aLU = np.einsum('ikl,lm->ikm', aLU, U)
-    aRV = np.einsum('ij,jkl->ikl', V, aR)
-    aRV = np.einsum('ikl,lm->ikm', aRV, np.conj(V).T)
-
-    # calculate entropy through singular values
+    # calculate entropy using singular values
     entropy = -np.sum(S**2*np.log(S**2))
 
-    return aLU, aRV, S, entropy
-
+    return Al, Ar, Ac, C, entropy
 
 
 def Heisenberg(Jx, Jy, Jz, h):
@@ -357,43 +348,42 @@ def Heisenberg(Jx, Jy, Jz, h):
     :return: H: (3, 3, 3, 3) tensor (top left, top right, bottom left, bottom right)
     """
     Sx = np.array([[0, 1, 0], [1, 0, 1], [0, 1, 0]]) / np.sqrt(2)
-    Sy = np.array([[0, 1, 0], [-1, 0, 1], [0, -1, 0]]) * 1.0j /np.sqrt(2)
+    Sy = np.array([[0, -1, 0], [1, 0, -1], [0, 1, 0]]) * 1.0j /np.sqrt(2)
     Sz = np.array([[1, 0, 0], [0, 0, 0], [0, 0, -1]])
     I = np.eye(3)
 
-    return -Jx*np.einsum('ij,kl->ikjl', Sx, Sx)-Jy*np.einsum('ij,kl->ikjl',Sy, Sy)-Jz*np.einsum('ij,kl->ikjl', Sz, Sz) \
-            - h*np.einsum('ij,kl->ikjl', I, Sz) - h*np.einsum('ij,kl->ikjl', Sz, I)
-
+    return -Jx*ncon((Sx, Sx), ([-1, -3], [-2, -4]))-Jy*ncon((Sy, Sy), ([-1, -3], [-2, -4]))-Jz*ncon((Sz, Sz), ([-1, -3], [-2, -4])) \
+            - h*ncon((I, Sz), ([-1, -3], [-2, -4])) - h*ncon((Sz, I), ([-1, -3], [-2, -4]))
 
 
 def oneSiteUniform(O, A, l, r):
-    #determine expectation value of one-body operator in uniform gauge
-    #first right contraction
-    return np.einsum('ijk,mnl,mi,kl,jn', A, np.conj(A), l, r, O)
+    # determine expectation value of one-body operator in uniform gauge
+    return ncon((l, r, A, np.conj(A), O), ([4, 1], [3, 6], [1, 2, 3], [4, 5, 6], [2, 5]))
 
 
 def oneSiteMixed(O, Ac):
-    #determine expectation value of one-body operator in mixed gauge
-    #first right contraction
-    # ikjl is juiste sequence
-
-    return np.einsum('ijk,jl,ilk', Ac, O, np.conj(Ac))
+    # determine expectation value of one-body operator in mixed gauge
+    ncon((Ac, np.conj(Ac), O), ([1, 2, 3], [1, 4, 3], [2, 4]), order=[2, 1, 3, 4])
 
 
-def twoSiteUniform(H, A, l, r):
-    #calculate the expectation value of the hamiltonian H (top left - top right - bottom left - bottom right)
-    #that acts on two sites
-    #contraction done from right to left
-    path = 'einsum_path', (0, 5), (0, 4), (0, 1, 2, 3, 4)
-    return np.einsum('ijk,klm,jlqo,rqp,pon,ri,mn', A, A, H, np.conj(A), np.conj(A), l, r, optimize=path)
+def twoSiteUniform(O, A, l, r):
+    # calculate the expectation value of the two-site operator O (top left - top right - bottom left - bottom right)
+    return ncon((l, r, A, A, np.conj(A), np.conj(A), O), ([6, 1], [5, 10], [1, 2, 3], [3, 4, 5], [6, 7, 8], [8, 9, 10], [2, 4, 7, 9]))
 
 
-def twoSiteMixed(H, Ac, Ar):
-    #calculate the expectation value of the hamiltonian H (top left - top right - bottom left - bottom right)
-    #in mixed canonical form that acts on two sites, contraction done from right to left
-    #case where Ac on left legs of H
-    # kjlipmno
-    return np.einsum('ijk,klm,jlpn,ipo,onm', Ac, Ar, H, np.conj(Ac), np.conj(Ar), optimize=True)
+def twoSiteMixed(O, Ac, Ar):
+    # calculate the expectation value of the two-site operator O (top left - top right - bottom left - bottom right)
+    return ncon((Ac, Ar, np.conj(Ac), np.conj(Ar), O), ([1, 2, 3], [3, 4, 5], [1, 6, 7], [7, 8, 5], [2, 4, 6, 8]), order=[3, 2, 4, 1, 6, 5, 8, 7])
+
+
+def transferLeft(A, v):
+    # function that implements the action of a transfer matrix defined by an MPS tensor A
+    # on a left matrix v of dimension (D, D) (bottom - top), given as a vector of size (D**2)
+    # returns a matrix of dimension (D, D) (bottom - top), given as a vector of size (D**2)
+
+    D = A.shape[0]
+
+    return np.reshape(ncon((v.reshape((D,D)), A, np.conj(A)), ([3, 1], [1, 2, -2], [3, 2, -1])), D**2)
 
 
 def transferRight(A, v):
@@ -402,53 +392,36 @@ def transferRight(A, v):
     # returns a vector of dimension D**2 (top - bottom)
 
     D = A.shape[0]
-
-    # contraction sequence: contract A with v, then with Abar
-    newV = np.einsum('ijk,kl->ijl', A, v.reshape((D,D)))
-    newV = np.einsum('ijk,ljk->il', newV, np.conj(A))
-
-    return np.reshape(newV, D**2)
-
-
-def transferLeft(A, v):
-    # function that implements the action of a transfer matrix defined by A
-    # on a left vector of dimension D**2 v (bottom - top)
-    # returns a vector of dimension D**2 (bottom - top)
-
-    D = A.shape[0]
-
-    # contraction sequence: contract A with v, then with Abar
-    newV = np.einsum('ijk,li->ljk', A, v.reshape((D, D)))
-    newV = np.einsum('ljk,ljm->mk', newV, np.conj(A))
-    return np.reshape(newV, D**2)
+    
+    return np.reshape(ncon((A, np.conj(A), v.reshape((D,D))), ([-1, 2, 1], [-2, 2, 3], [1, 3])), D ** 2)
 
 
 def transferRegularLeft(A, l, r, v):
-    # function that implements the action of 1-T + outer(r,l)
-    # on a left vector of dimension D**2 v (bottom - top)
-    # returns a vector of dimension D**2 (bottom - top)
+    # function that implements the action of 1 - (T - outer(r,l))
+    # on a left matrix v of dimension (D, D) (bottom - top), given as a vector of size (D**2)
+    # returns a matrix of dimension (D, D) (bottom - top), given as a vector of size (D**2)
 
     D = A.shape[0]
     v_T = transferLeft(A, v)
-    v_rl = np.trace(v.reshape((D, D))@r) * l
-    return v - v_T + np.reshape(v_rl, D**2)
+    v_rl = np.trace(v.reshape((D, D)) @ r) * l
+    return v - v_T + v_rl.reshape(D**2)
 
 
 def transferRegularRight(A, l, r, v):
     # function that implements the action of 1-T + outer(r,l)
-    # on a left vector of dimension D**2 v (bottom - top)
-    # returns a vector of dimension D**2 (bottom - top)
+    # on a left matrix v of dimension (D, D) (top - bottom), given as a vector of size (D**2)
+    # returns a a matrix of dimension (D, D) (top - bottom), given as a vector of size (D**2)
 
     D = A.shape[0]
-    v_T = transferRight(A,v)
-    v_rl = np.trace(l@v.reshape((D,D))) * r
-    return v - v_T + np.reshape(v_rl, D**2)
+    v_T = transferRight(A, v)
+    v_rl = np.trace(l @ v.reshape((D,D))) * r
+    return v - v_T + v_rl.reshape(D**2)
 
 
 def energyGradient(H, A, l, r):
     """
     Function to determine the gradient of H @MPS A
-    :param H: (d, d, d, d) hamiltonian density operator
+    :param H: (d, d, d, d) (regularised) hamiltonian density operator
     :param A: (D, d, D) MPS tensor
     :param l: (D, D) left fixed point (normalised!)
     :param r: (D, D) right fixed point (normalised!)
@@ -457,58 +430,37 @@ def energyGradient(H, A, l, r):
 
     # a rank 3 tensor, equation (116) in the notes
     # consists of 4 terms
-    # have to solve x = y(1-T_) where T_ = createTransfer(A) - np.outer(leftFixedPoint(A), rightFixedPoint(A))
+    # have to solve x = y(1-T_) where T_ = T - l \otimes r is the regularised transfer matrix
     # don't naively construct (1-T_) because all these objects have 4D legs. As before describe how this operator works on a vector y
     # create function handle instead of D**2 matrix
     D = A.shape[0]
 
-
-    path1 = 'einsum_path', (0, 5), (0, 1, 2, 3, 4)
-
-    transfer_Left = LinearOperator((D**2, D**2), matvec=partial(transferRegularLeft, A, l, r))
-    x = np.einsum('ijk,klm,jlqo,rqp,pon,ri->nm', A, A, H, np.conj(A), np.conj(A), l, optimize=path1)
-    x = np.reshape(x, D**2)
-    Lh = gmres(transfer_Left, x)[0]
-
-    path2 = 'einsum_path', (1, 5), (0, 1, 2, 3, 4)
-    transfer_Right = LinearOperator((D**2, D**2), matvec=partial(transferRegularRight, A, l, r))
-    x = np.einsum('ijk,klm,jlqo,rqp,pon,mn->ir', A, A, H, np.conj(A), np.conj(A), r, optimize=path2)
-    x = np.reshape(x, D**2)
-    Rh = gmres(transfer_Right, x.reshape(D**2))[0]
-
-    Lh = np.reshape(Lh, (D, D))
-    Rh = np.reshape(Rh, (D, D))
-    ###########
-    #FIRST TERM
-    ###########
-    path3 = 'einsum_path', (0, 4), (0, 3), (0, 1, 2, 3)
-    first = np.einsum('ijk,klm,jlqo,pon,ri,mn->rqp', A, A, H, np.conj(A), l, r, optimize=path3)
+    # first center term
+    centerTerm1 = ncon((l, r, A, A, np.conj(A), H), ([6, 1], [5, -3], [1, 3, 2], [2, 4, 5], [6, 7, -1], [3, 4, 7, -2]))
     
-    ###########
-    #SECOND TERM
-    ###########
-    path4 = 'einsum_path', (0, 4), (0, 3), (0, 1, 2, 3)
-    second = np.einsum('ijk,klm,jlqo,rqp,ri,mn->pon', A, A, H, np.conj(A), l, r, optimize=path4)
+    # second center term
+    centerTerm2 = ncon((l, r, A, A, np.conj(A), H), ([-1, 1], [5, 7], [1, 3, 2], [2, 4, 5], [-3, 6, 7], [3, 4, -2, 6]))
 
-    ###########
-    #THIRD TERM
-    ###########
-    third = np.einsum('mi,ijk,kl->mjl', l, A, Rh)
+    # left environment term
+    xL = ncon((l, A, A, np.conj(A), np.conj(A), H), ([5, 1], [1, 3, 2], [2, 4, -2], [5, 6, 7], [7, 8, -1], [3, 4, 6, 8]))
+    transfer_Left = LinearOperator((D**2, D**2), matvec=partial(transferRegularLeft, A, l, r))
+    Lh = gmres(transfer_Left, xL.reshape(D ** 2))[0].reshape((D,D))
+    leftEnvTerm = ncon((Lh, A, r), ([-1, 1], [1, -2, 2], [2, -3]))
 
-    ###########
-    #FOURTH TERM
-    ###########
-    fourth = np.einsum('mi,ijk,kl->mjl', Lh, A, r)
+    # right environment term
+    xR =  ncon((r, A, A, np.conj(A), np.conj(A), H), ([4, 5], [-1, 2, 1], [1, 3, 4], [-2, 8, 7], [7, 6, 5], [2, 3, 8, 6]))
+    transfer_Right = LinearOperator((D**2, D**2), matvec=partial(transferRegularRight, A, l, r))
+    Rh = gmres(transfer_Right, xR.reshape(D**2))[0].reshape((D,D))
+    rightEnvTerm = ncon((Rh, A, l), ([1, -3], [2, -2, 1], [-1, 2]))
 
-    # define Lh and Rh
-    return 2 * (first+second+third+fourth)
+    return 2 * (centerTerm1 + centerTerm2 + leftEnvTerm + rightEnvTerm)
 
 
-def energyDensity(A, h):
+def energyDensity(A, H):
     """
     Function to calculate energy density and gradient of MPS A with, using Hamiltonian H
     :param A: MPS tensor (D, d, D)
-    :param h: Hamiltonian operator (d, d, d, d)
+    :param H: Hamiltonian operator (d, d, d, d)
     :return e: Energy density (real scalar)
     :return g: Gradient of energy density evaluated @A
     """
@@ -519,22 +471,43 @@ def energyDensity(A, h):
     A, l, r = normaliseMPS(A)
 
     # calculate energy density
-    e = twoSiteUniform(h, A, l, r)
+    e = np.real(twoSiteUniform(H, A, l, r))
 
-    # check if real!
-    if np.imag(e) > 1e-14:
-        print("complex energy? ", e)
-    e = np.real(e)
+    # regularise Hamiltonian
+    Htilde = H - e * ncon((np.eye(d), np.eye(d)), ([-1, -3], [-2, -4]))
 
-    # renormalise Hamiltonian
-    hTilde = h - e * np.einsum("ik,jl->ijkl", np.eye(d), np.eye(d))
-
-    # calculate gradient
-    g = energyGradient(hTilde, A, l, r)
+    # calculate gradient of energy
+    g = energyGradient(Htilde, A, l, r)
 
     return e, g
 
 def energyWrapper(H, D, d, varA):
+    """
+    Wrapper around energyDensity function that takes complex MPS tensor of
+    size (D, d, D) as a real vector of size (2 * D ** 2 * d) and returns the
+    complex gradient tensor of size (D, d, D) as a real vector of size
+    (2 * D ** 2 * d)
+    
+    Parameters
+    ----------
+    H : np.array(d, d, d, d)
+        Two-site Hamiltonian operator.
+    D : int
+        Bond dimension of MPS.
+    d : int
+        Physical dimension of sites in spin chain.
+    varA : np.array(2 * D ** 2 * d)
+        Real vector of size (2 * D ** 2 * d) that represents a complex MPS
+        tensor of size (D, d, D).
+
+    Returns
+    -------
+    e : float
+        Energy density (real scalar).
+    g : np.array(2 * D ** 2 * d)
+        Real vector of size (2 * D ** 2 * d) that represents the complex
+        energy gradient tensor of size (D, d, D).
+    """
     Areal = (varA[:D**2 *d]).reshape(D, d, D)
     Acomplex = (varA[D**2*d:]).reshape(D, d, D)
     A = Areal + 1j*Acomplex
@@ -544,8 +517,7 @@ def energyWrapper(H, D, d, varA):
 
 #### functions for vumps
 
-# right environment vumps
-def rightEnvMixed(Ar, C, hTilde, delta):
+def rightEnvMixed(Ar, C, Htilde, delta):
     '''
     :param Ar:
     :param L:
@@ -554,14 +526,17 @@ def rightEnvMixed(Ar, C, hTilde, delta):
     :return:
     '''
     D = Ar.shape[0]
-    transfer_Right = LinearOperator((D**2, D**2), matvec=partial(transferRegularRight, Ar, C @ np.conj(C).T, np.eye(D)))
-    xR = np.einsum("ijk,klm,nop,pqm,jloq->in", Ar, Ar, np.conj(Ar), np.conj(Ar), hTilde, optimize=True)
+    
+    xR =  ncon((Ar, Ar, np.conj(Ar), np.conj(Ar), Htilde), ([-1, 2, 1], [1, 3, 4], [-2, 7, 6], [6, 5, 4], [2, 3, 7, 5]))
+    # !!!!!!!!!!!!!!!!!!!!MADE A MISTAKE HERE BEFORE BUT PROCEDURE STILL CONVERGED!!!!!!!!!!!!!!!!
+    # transfer_Right = LinearOperator((D**2, D**2), matvec=partial(transferRegularRight, Ar, C @ np.conj(C).T, np.eye(D)))
+    transfer_Right = LinearOperator((D**2, D**2), matvec=partial(transferRegularRight, Ar, np.conj(C).T @ C, np.eye(D)))
     Rh = gmres(transfer_Right, xR.reshape(-1), tol=delta/10)[0]
     
     return Rh.reshape(D, D)
 
 #left environment vumps
-def leftEnvMixed(Al, C, hTilde, delta):
+def leftEnvMixed(Al, C, Htilde, delta):
     '''
     :param Al:
     :param L:
@@ -570,13 +545,13 @@ def leftEnvMixed(Al, C, hTilde, delta):
     :return:
     '''
     D = Al.shape[0]
+    xL =  ncon((Al, Al, np.conj(Al), np.conj(Al), Htilde), ([4, 2, 1], [1, 3, -2], [4, 5, 6], [6, 7, -1], [2, 3, 5, 7]))
     transfer_Left = LinearOperator((D**2, D**2), matvec=partial(transferRegularLeft, Al, np.eye(D), C @ np.conj(C).T))
-    xL = np.einsum("ijk,klm,ino,opq,jlnp->qm", Al, Al, np.conj(Al), np.conj(Al), hTilde, optimize=True)
     Lh = gmres(transfer_Left, xL.reshape(-1), tol=delta/10)[0]
 
     return Lh.reshape(D, D)
 
-def H_Ac(v, Al, Ar, Rh, Lh, hTilde):
+def H_Ac(v, Al, Ar, Rh, Lh, Htilde):
     '''
     :param v:
     :param Al:
@@ -586,14 +561,14 @@ def H_Ac(v, Al, Ar, Rh, Lh, hTilde):
     :param hTilde:
     :return:
     '''
-    centerTerm1 = np.einsum("ijk,klm,ino,jlnp->opm", Al, v, np.conj(Al), hTilde, optimize=True)
-    centerTerm2 = np.einsum("ijk,klm,nom,jlpo->ipn", v, Ar, np.conj(Ar), hTilde, optimize=True)
-    leftEnvTerm = np.einsum("ij,jkl -> ikl", Lh, v)
-    rightEnvTerm = np.einsum("ijk,kl->ijl", v, Rh)
-
+    centerTerm1 = ncon((Al, v, np.conj(Al), Htilde), ([4, 2, 1], [1, 3, -3], [4, 5, -1], [2, 3, 5, -2]))
+    centerTerm2 = ncon((v, Ar, np.conj(Ar), Htilde), ([-1, 2, 1], [1, 3, 4], [-3, 5, 4], [2, 3, -2, 5]))
+    leftEnvTerm = ncon((Lh, v), ([-1, 1], [1, -2, -3]))
+    rightEnvTerm = ncon((v, Rh), ([-1, -2, 1], [1, -3]))
+    
     return centerTerm1 + centerTerm2 + leftEnvTerm + rightEnvTerm
 
-def H_C(v, Al, Ar, Rh, Lh, hTilde):
+def H_C(v, Al, Ar, Rh, Lh, Htilde):
     '''
     :param v:
     :param Al:
@@ -603,13 +578,13 @@ def H_C(v, Al, Ar, Rh, Lh, hTilde):
     :param hTilde:
     :return:
     '''
-    centerTerm = np.einsum("ijk,kl,lmn,iop,qrn,jmor->pq", Al, v, Ar, np.conj(Al), np.conj(Ar), hTilde, optimize=True)
+    centerTerm = ncon((Al, v, Ar, np.conj(Al), np.conj(Ar), Htilde), ([5, 3, 1], [1, 2], [2, 4, 7], [5, 6, -1], [-2, 8, 7], [3, 4, 6, 8]))
     leftEnvTerm = Lh @ v
     rightEnvTerm = v @ Rh
 
     return centerTerm + leftEnvTerm + rightEnvTerm
 
-def calcNewCenter(Al, Ar, Ac, C, Lh, Rh, hTilde, delta):
+def calcNewCenter(Al, Ar, Ac, C, Lh, Rh, Htilde, delta):
     '''
     :param Al:
     :param Ar:
@@ -620,18 +595,15 @@ def calcNewCenter(Al, Ar, Ac, C, Lh, Rh, hTilde, delta):
     :param hTilde:
     :return:
     '''
-    
     D = Al.shape[0]
     d = Al.shape[1]
-    handleAc = lambda v: (H_Ac(v.reshape(D, d, D), Al, Ar, Rh, Lh, hTilde)).reshape(-1)
+    handleAc = lambda v: (H_Ac(v.reshape(D, d, D), Al, Ar, Rh, Lh, Htilde)).reshape(-1)
     handleAc = LinearOperator((D ** 2 * d, D ** 2 * d), matvec=handleAc)
-    handleC = lambda v: (H_C(v.reshape(D, D), Al, Ar, Rh, Lh, hTilde)).reshape(-1)
+    handleC = lambda v: (H_C(v.reshape(D, D), Al, Ar, Rh, Lh, Htilde)).reshape(-1)
     handleC = LinearOperator((D ** 2, D ** 2), matvec=handleC)
     _, AcPrime = eigs(handleAc, k=1, which="SR", v0=Ac.reshape(-1), tol=delta/10)
-    AcPrime = AcPrime.reshape(D, d, D)
     _, cPrime = eigs(handleC, k=1, which="SR", v0=C.reshape(-1), tol=delta/10)
-    cPrime = cPrime.reshape(D, D)
-    return AcPrime, cPrime
+    return AcPrime.reshape((D,d,D)), cPrime.reshape((D,D))
 
 def minAcC(AcPrime, cPrime):
     '''
@@ -639,7 +611,6 @@ def minAcC(AcPrime, cPrime):
     :param cPrime:
     :return:
     '''
-
     D = AcPrime.shape[0]
     d = AcPrime.shape[1]
     UlAc, _ = polar(AcPrime.reshape(D*d,D))
@@ -648,6 +619,7 @@ def minAcC(AcPrime, cPrime):
     _, Ar = rightOrthonormal(Al)
     Ac = AcPrime
     C = cPrime
-    norm = np.einsum("ijk,ijk", Ac, np.conj(Ac))
-    Ac /= np.sqrt(norm)
+    nrm = np.trace(C @ np.conj(C).T)
+    Ac = Ac / np.sqrt(nrm)
+    C = C / np.sqrt(nrm)
     return Al, Ar, Ac, C

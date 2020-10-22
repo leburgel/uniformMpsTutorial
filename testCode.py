@@ -1,7 +1,8 @@
 from tutorialFunctions import *
 import matplotlib.pyplot as plt
+from time import time
 ### A first test case for the gradient in python
-D = 6
+D = 100
 d = 3
 J = -1
 
@@ -22,15 +23,18 @@ if False:
 # extra haakjes om real(g) en imag(g) in tuple te plaatsen voor concate anders error !!!
 varA = np.concatenate((ReA.reshape(-1), ImA.reshape(-1)))
 
+print('Bond dimension: D =', D)
 
 if False:
     # test gradient descent
     
     #pr.enable()
     EnergyHandle = partial(energyWrapper, H, D, d)
+    t0 = time()
     res = minimize(EnergyHandle, varA, jac=True,tol=1e-4)
+    print('Time for gradient descent optimization:', time()-t0, 's')
     Aopt = res.x
-    print(res.fun, '\n')
+    print('Procedure converged at energy', res.fun, '\n')
     #pr.disable()
     # pr.print_stats()
     
@@ -49,6 +53,7 @@ if True:
     
     flag = 1
     delta = 1e-4
+    t0 = time()
     while flag:
         e = np.real(twoSiteMixed(H, Ac, Ar))
         print(e)
@@ -58,10 +63,12 @@ if True:
         AcPrime, CPrime = calcNewCenter(Al, Ar, Ac, C, Lh, Rh, hTilde, delta)
         AlPrime, ArPrime, AcPrime, CPrime = minAcC(AcPrime, CPrime)
         delta = np.linalg.norm(H_Ac(Ac, Al, Ar, Rh, Lh, hTilde) - np.einsum('ijk,kl->ijl', Al, H_C(C, Al, Ar, Rh, Lh, hTilde)))
-        print(delta)
+        # print(delta)
         Al = AlPrime; Ar = ArPrime; Ac = AcPrime; C = CPrime;
         if delta < tol:
             flag = 0
+    print('Time for VUMPS optimization:', time()-t0, 's')
+    print('Procedure converged at energy ', np.real(twoSiteMixed(H, Ac, Ar)), '\n')
     [_, S, _] = svd(C);
     plt.figure()
     plt.scatter(np.arange(D), S, marker='x')
