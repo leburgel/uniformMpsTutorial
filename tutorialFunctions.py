@@ -1,7 +1,5 @@
 import numpy as np
-from scipy.linalg import rq
-from scipy.linalg import qr
-from scipy.linalg import svd
+from scipy.linalg import rq, qr, svd, polar
 from scipy.sparse.linalg import eigs, LinearOperator, gmres
 from scipy.optimize import minimize
 from functools import partial
@@ -398,7 +396,7 @@ def twoSiteMixed(H, Ac, Ar):
     return np.einsum('ijk,klm,jlpn,ipo,onm', Ac, Ar, H, np.conj(Ac), np.conj(Ar))
 
 
-def rightHandle(A, v):
+def transferRight(A, v):
     # function that implements the action of a transfer matrix defined by A
     # on a right vector of dimension D**2 v (top - bottom)
     # returns a vector of dimension D**2 (top - bottom)
@@ -412,7 +410,7 @@ def rightHandle(A, v):
     return np.reshape(newV, D**2)
 
 
-def leftHandle(A,v):
+def transferLeft(A, v):
     # function that implements the action of a transfer matrix defined by A
     # on a left vector of dimension D**2 v (bottom - top)
     # returns a vector of dimension D**2 (bottom - top)
@@ -420,29 +418,29 @@ def leftHandle(A,v):
     D = A.shape[0]
 
     # contraction sequence: contract A with v, then with Abar
-    newV = np.einsum('ijk,li->ljk', A, v.reshape((D,D)))
+    newV = np.einsum('ijk,li->ljk', A, v.reshape((D, D)))
     newV = np.einsum('ljk,ljm->mk', newV, np.conj(A))
     return np.reshape(newV, D**2)
 
 
-def leftHandle_(A, r, l, v):
+def transferRegularLeft(A, r, l, v):
     # function that implements the action of 1-T + outer(r,l)
     # on a left vector of dimension D**2 v (bottom - top)
     # returns a vector of dimension D**2 (bottom - top)
 
     D = A.shape[0]
-    v_T = leftHandle(A, v)
+    v_T = transferLeft(A, v)
     v_rl = np.trace(v.reshape((D, D))@r) * l
     return v - v_T + np.reshape(v_rl, D**2)
 
 
-def rightHandle_(A, r, l, v):
+def transferRegularRight(A, r, l, v):
     # function that implements the action of 1-T + outer(r,l)
     # on a left vector of dimension D**2 v (bottom - top)
     # returns a vector of dimension D**2 (bottom - top)
 
     D = A.shape[0]
-    v_T = rightHandle(A,v)
+    v_T = transferRight(A,v)
     v_rl = np.trace(l@v.reshape((D,D))) * r
     return v - v_T + np.reshape(v_rl, D**2)
 
@@ -463,14 +461,17 @@ def energyGradient(H, A, l, r):
     # don't naively construct (1-T_) because all these objects have 4D legs. As before describe how this operator works on a vector y
     # create function handle instead of D**2 matrix
     D = A.shape[0]
+
+
     path1 = 'einsum_path', (0, 5), (0, 1, 2, 3, 4)
-    transfer_Left = LinearOperator((D**2, D**2), matvec=partial(leftHandle_, A, r, l))
+
+    transfer_Left = LinearOperator((D**2, D**2), matvec=partial(transferRegularLeft, A, r, l))
     x = np.einsum('ijk,klm,jlqo,rqp,pon,ri->nm', A, A, H, np.conj(A), np.conj(A), l, optimize=path1)
     x = np.reshape(x, D**2)
     Lh = gmres(transfer_Left, x)[0]
 
     path2 = 'einsum_path', (1, 5), (0, 1, 2, 3, 4)
-    transfer_Right = LinearOperator((D**2, D**2), matvec=partial(rightHandle_, A, r, l))
+    transfer_Right = LinearOperator((D**2, D**2), matvec=partial(transferRegularRight, A, r, l))
     x = np.einsum('ijk,klm,jlqo,rqp,pon,mn->ir', A, A, H, np.conj(A), np.conj(A), r, optimize=path2)
     x = np.reshape(x, D**2)
     Rh = gmres(transfer_Right, x.reshape(D**2))[0]
@@ -500,7 +501,7 @@ def energyGradient(H, A, l, r):
     fourth = np.einsum('mi,ijk,kl->mjl', Lh, A, r)
 
     # define Lh and Rh
-    return first+second+third+fourth
+    return 2 * (first+second+third+fourth)
 
 
 def energyDensity(A, h):
@@ -540,3 +541,144 @@ def energyWrapper(H, D, d, varA):
     e, g = energyDensity(A, H)
     g = np.concatenate((np.real(g).reshape(-1), np.imag(g).reshape(-1)))
     return e, g
+
+#### functions for vumps
+
+# right environment vumps
+def RightEnvMixed(Ar, C, hTilde):
+    '''
+    :param Ar:
+    :param L:
+    :param R:
+    :param hTilde:
+    :return:
+    '''
+    D = Ar.shape[0]
+    xR = np.einsum("ijk,klm,nop,pqm,jloq->in", Ar, Ar, np.conj(Ar), np.conj(Ar), hTilde)
+    handleR = lambda v: (v.reshape(D, D) - np.einsum("ij,kli,mlj->km", v.reshape(D, D), Ar, np.conj(Ar))\
+                        + np.trace((np.conj(C).T @ C) @ v.reshape(D, D)) * np.identity(D)).reshape(-1)
+    Rh = gmres(handleR, xR.reshape(-1))[0]
+    Rh = Rh.reshape(D, D)
+
+    return Rh
+
+#left environment vumps
+def LeftEnvMixed(Al, C, hTilde):
+    '''
+
+    :param Al:
+    :param L:
+    :param R:
+    :param hTilde:
+    :return:
+    '''
+    D = Al.shape[0]
+    xL = np.einsum("ijk,klm,ino,opq,jlnp->qm", Al, Al, np.conj(Al), np.conj(Al), hTilde)
+    handleL = lambda v: (v.reshape(D, D) - np.einsum("ij,jkl,ikm->ml", v.reshape(D, D), Al, np.conj(Al))\
+                        + np.trace(v.reshape(D, D) @ (C @ np.conj(C).T)) * np.identity(D)).reshape(-1)
+    Lh = (gmres(handleL, xL.reshape(-1))[0]).reshape(D, D)
+
+    return Lh
+
+def hAc(v, Al, Ar, Rh, Lh, hTilde):
+    '''
+
+    :param v:
+    :param Al:
+    :param Ar:
+    :param Rh:
+    :param Lh:
+    :param hTilde:
+    :return:
+    '''
+    centerTerm1 = np.einsum("ijk,klm,ino,jlnp->opm", Al, v, np.conj(A_l).T, hTilde)
+    centerTerm2 = np.einsum("ijk,klm,nom,jlpo->ipn", v, Ar, np.conj(Ar), hTilde)
+    leftEnvTerm = np.einsum("ij,jkl -> ikl", Lh, v)
+    rightEnvTerm = np.einsum("ijk,kl->ijl", v, Rh)
+
+    return centerTerm1 + centerTerm2 + leftEnvTerm + rightEnvTerm
+
+def hC(v, Al, Ar, Rh, Lh, hTilde):
+    '''
+
+    :param v:
+    :param Al:
+    :param Ar:
+    :param Rh:
+    :param Lh:
+    :param hTilde:
+    :return:
+    '''
+    centerTerm = np.einsum("ijk,kl,lmn,iop,qrn,jmor->pq", Al, v, Ar, np.conj(Al), np.conj(Ar), hTilde)
+    leftEnvTerm = Lh @ v
+    rightEnvTerm = v @ Rh
+
+    return centerTerm + leftEnvTerm + rightEnvTerm
+
+def calcNewCenter(Al, Ar, C, Lh, Rh, hTilde):
+    '''
+
+    :param Al:
+    :param Ar:
+    :param L:
+    :param R:
+    :param Lh:
+    :param Rh:
+    :param hTilde:
+    :return:
+    '''
+
+    D = Al.shape[0]
+    d = Al.shape[1]
+    Ac = np.einsum("ijk,kl->ijl", Al, C)
+    handleAc = lambda v: (hAc(v.reshape(D, d, D), Al, Ar, Rh, Lh, hTilde)).reshape(-1)
+    handleC = lambda v: (hC(v.reshape(D, D), Al, Ar, Rh, Lh, hTilde)).reshape(-1)
+    _, AcPrime = eigs(handleAc,k=1,which = "SR", v0=Ac.reshape(-1))
+    AcPrime = AcPrime.reshape(D, d, D)
+    _, cPrime = eigs(handleC,k=1,which = "SR", v0=C.reshape(-1))
+    cPrime = cPrime.reshape(D, D)
+    return AcPrime, cPrime
+
+def minAcC(AcPrime, cPrime):
+    '''
+
+    :param AcPrime:
+    :param cPrime:
+    :return:
+    '''
+
+    D = AcPrime.shape[0]
+    d = AcPrime.shape[1]
+    UlAc, _ = polar(AcPrime.reshape(D*d,D))
+    UlC, _ = polar(cPrime)
+    Al = (UlAc @ np.conj(UlC).T).reshape(D, d, D)
+    _, Ar = rightOrthonormal(Al)
+    Ac = AcPrime
+    C = cPrime
+    norm = np.einsum("ijk,ijk", Ac, np.conj(Ac))
+    Ac /= np.sqrt(norm)
+    return Al, Ar, Ac, C
+
+# ###### VUMPS test Heisenberg antiferromagnet
+
+# tol = 1e-3
+# D = 4
+# d = 3
+# h = Heisenberg(1, -1, 1, 0)
+# A = createMPS(D, d)
+# A = normaliseMPS(A)[0]
+# L, Al = leftOrthonormal(A)
+# R, Ar = rightOrthonormal(A)
+# C = L @ R
+# Ac = np.einsum("ijk,kl->ijl", Al, C)
+# flag = 1
+
+# ######## some problems with calculating Rh and Lh here
+# while flag < 100:
+#     e = np.real(twoSiteMixed(h, Ac, Ar))
+#     hTilde = h - e * np.einsum("ik,jl->ijkl", np.identity(d), np.identity(d))
+#     Rh = RightEnvMixed(Ar, C, hTilde)
+#     Lh = LeftEnvMixed(Al, C, hTilde)
+#     AcPrime, cPrime = calcNewCenter(Al, Ar, C, Lh, Rh, hTilde)
+#     AlPrime, ArPrime, AcPrime, cPrime = minAcC(AcPrime, cPrime)
+#     flag += 1
