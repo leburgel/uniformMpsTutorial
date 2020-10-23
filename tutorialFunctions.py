@@ -4,6 +4,7 @@ from scipy.sparse.linalg import eigs, LinearOperator, gmres
 from scipy.optimize import minimize
 from functools import partial
 from ncon import ncon
+import matplotlib.pyplot as plt
 
 
 def createMPS(bondDimension, physDimension):
@@ -616,12 +617,18 @@ def minAcC(AcPrime, cPrime):
     UlAc, _ = polar(AcPrime.reshape(D*d,D))
     UlC, _ = polar(cPrime)
     Al = (UlAc @ np.conj(UlC).T).reshape(D, d, D)
-    _, Ar = rightOrthonormal(Al)
-    Ac = AcPrime
-    C = cPrime
+    # # OPTION 1: OLD
+    # _, Ar = rightOrthonormal(Al)
+    # Ac = AcPrime
+    # C = cPrime
+    # nrm = np.trace(C @ np.conj(C).T)
+    # Ac = Ac / np.sqrt(nrm)
+    # C = C / np.sqrt(nrm)
+    # OPTION 2: NEW
+    C, Ar = rightOrthonormal(Al)
     nrm = np.trace(C @ np.conj(C).T)
-    Ac = Ac / np.sqrt(nrm)
     C = C / np.sqrt(nrm)
+    Ac = ncon((Al, C), ([-1, -2, 1], [1, -3]))
     return Al, Ar, Ac, C
 
 def kronecker(d, n):
@@ -629,13 +636,13 @@ def kronecker(d, n):
     out[ tuple([np.arange(d)] * n) ] = 1
     return out
 
-def O(beta, J):
+def O_tensor(beta, J):
     c, s = np.sqrt(np.cosh(beta*J)), np.sqrt(np.sinh(beta*J))
     Q_sqrt = 1/np.sqrt(2) * np.array([[c+s, c-s],[c-s, c+s]])
     O = ncon((Q_sqrt, Q_sqrt, Q_sqrt, Q_sqrt, kronecker(2,4)), ([-1,1], [-2,2], [-3,3], [-4,4], [1,2,3,4]))
     return O
 
-def M(beta, J):
+def M_tensor(beta, J):
     S_z = np.array([[1,0],[0,-1]])
     c, s = np.sqrt(np.cosh(beta*J)), np.sqrt(np.sinh(beta*J))
     Q_sqrt = 1/np.sqrt(2) * np.array([[c+s, c-s],[c-s, c+s]])
@@ -683,34 +690,41 @@ def partitionCenter(Ac, C, Fl, Fr, O, lam, delta):
     return AcPrime.reshape(D, d, D), cPrime.reshape(D, D)
 
 def Magnetization(beta, J, Ac, Fl, Fr):
-    M_exp = ncon((Fl, Ac, M(beta, J), np.conj(Ac), Fr), ([1, 3, 2], [2,7,5],[3,7,8,6],[1,6,4], [5,8,4]))
+    M_exp = ncon((Fl, Ac, M_tensor(beta, J), np.conj(Ac), Fr), ([1, 3, 2], [2,7,5],[3,7,8,6],[1,6,4], [5,8,4]))
     return M_exp
-#### vumps to calculate ising partition function
 
+#### vumps to calculate ising partition function
+betas = np.linspace(0,3,50)
+magnetizations = []
 D = 12
 d = 2
 A = createMPS(D,d)
 Al, Ar, Ac, C = mixedCanonical(A)
-beta = 0.440686793509772 #critical point
+#beta = 0.440686793509772 #critical point
 J=1
-O = O(beta,1)
-delta = 1e-4
-tol = 1e-3
-flag = 1
+for beta in betas:
+    O = O_tensor(beta,1)
+    delta = 1e-4
+    tol = 1e-3
+    flag = 1
+    
+    while flag:
+        lam, Fl = partitionLeft(Al, O, delta)
+        _ , Fr = partitionLeft(Ar, O, delta)
+        overlap = overlapPartitionsFlFr(Fl, Fr, C)
+        Fl = Fl/overlap
+        lam = np.real(lam)[0]
+        AcPrime, cPrime = partitionCenter(Ac, C, Fl, Fr, O, lam, delta)
+        AlPrime, ArPrime, AcPrime, cPrime = minAcC(AcPrime, cPrime)
+        delta = np.linalg.norm(oAc(Ac, Fl, Fr, O, lam) - ncon((Al, oC(C, Fl, Fr)), ([-1, -2, 1], [1, -3])))
+        Al = AlPrime
+        Ar = ArPrime
+        Ac = AcPrime
+        C = cPrime
+        print(delta)
+        if delta < tol:
+            flag = 0
+    magnetizations.append(Magnetization(beta, J, Ac, Fl, Fr))
 
-while flag:
-    lam, Fl = partitionLeft(Al, O, delta)
-    _ , Fr = partitionLeft(Ar, O, delta)
-    overlap = overlapPartitionsFlFr(Fl, Fr, C)
-    Fl = Fl/overlap
-    lam = np.real(lam)[0]
-    AcPrime, cPrime = partitionCenter(Ac, C, Fl, Fr, O, lam, delta)
-    AlPrime, ArPrime, AcPrime, cPrime = minAcC(AcPrime, cPrime)
-    delta = np.linalg.norm(oAc(Ac, Fl, Fr, O, lam) - ncon((Al, oC(C, Fl, Fr)), ([-1, -2, 1], [1, -3])))
-    Al = AlPrime
-    Ar = ArPrime
-    Ac = AcPrime
-    C = cPrime
-    print(delta)
-    if delta < tol:
-        flag = 0
+plt.plot(betas, magnetizations)
+        
