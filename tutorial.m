@@ -263,14 +263,14 @@ tic
 i = 0;
 while flag
     e = real(ExpvTwoSiteMixed(AC, AL, h)); % current energy density
-    e
+    fprintf('Current energy: %d\n', e)
     htilde = h - e * ncon({eye(d), eye(d)}, {[-1 -3], [-2 -4]}); % regularized energy density
     Rh = RightEnvMixed(AR, C, htilde, delta);
     Lh = LeftEnvMixed(AL, C, htilde, delta);
     [ACprime, Cprime] = CalculateNewCenter(AL, AR, AC, C, Rh, Lh, htilde, delta);
     [ALprime, ARprime, ACprime, Cprime] = MinAcC(ACprime, Cprime);
     delta = ArrayNorm(H_AC(AC, AL, AR, Rh, Lh, htilde) - ncon({AL, H_C(C, AL, AR, Rh, Lh, htilde)}, {[-1 -2 1], [1 -3]})); % calculate error using new or old AL, AR, Rh, Lh? now using old...
-    delta
+    fprintf('Current error: %d\n', delta)
     AL = ALprime; AR = ARprime; AC = ACprime; C = Cprime; % update
     i = i+1;
     if delta < tol
@@ -293,14 +293,14 @@ plot(svals, 'd');
 
 tol = 1e-5;
 
-beta = .1; % 2.269
+beta = 0.01; % 2.269
 J = 1;
 
 D = 12;
 d = 2;
 A = randcomplex(D, d, D); % MPS tensor
 
-O = IsingO(beta, J);
+O = isingO(beta, J);
 
 % algorithm 8 for finding MPS fixed point of a given MPO
 [AL, AR, AC, C] = MixedCanonical(A); % go to mixed gauge
@@ -308,13 +308,14 @@ flag = true;
 delta = 1e-4;
 i = 0;
 while flag
-    [lambda, FL] = FixedPointLeft(AL, O, delta);
-    [tst, FR] = FixedPointRight(AR, O, delta);
-    FL = FL / OverlapFixedPoints(FL, FR, C);
-    [ACprime, Cprime] = CalculateNewCenter2D(AC, C, FL, FR, O, lambda, delta);
+    [lambda, FL] = leftFixedPointMPO(AL, O, delta);
+    [tst, FR] = rightFixedPointMPO(AR, O, delta);
+    lambda = real(lambda);
+    FL = FL / overlapFixedPointsMPO(FL, FR, C);
+    [ACprime, Cprime] = calcNewCenterMPO(AC, C, FL, FR, O, lambda, delta);
     [ALprime, ARprime, ACprime, Cprime] = MinAcC(ACprime, Cprime);
     delta = ArrayNorm(OAC(AC, FL, FR, O, lambda) - ncon({AL, OC(C, FL, FR)}, {[-1 -2 1], [1 -3]})); % calculate error using new or old AL, AR, Rh, Lh? now using old...
-    delta
+    fprintf('Current error: %d\n', delta)
     AL = ALprime; AR = ARprime; AC = ACprime; C = Cprime; % update
     i = i+1;
     if delta < tol
@@ -322,12 +323,57 @@ while flag
     end
 end
 fprintf('Iterations needed: %i\n', i)
-freeEnergy = -log(lambda)/beta;
-[~, freeEnergyExact, ~] = isingExact(beta, J);
+f = freeEnergyDensity(beta, lambda);
+[~, fExact, ~] = isingExact(beta, J);
 % check free energy
-freeEnergy
-freeEnergyExact
-abs(freeEnergyExact - freeEnergy)/abs(freeEnergy) < 1e-5
+fprintf('Computed: %d\t\tExact: %d\n', f, fExact);    
+fprintf('Computed and exact match: %d\n', abs(fExact - f)/abs(f) < 1e-5);
+
+
+%% VUMPS for 2d classical Ising model: magnetisation curve
+
+tol = 1e-4;
+D = 12;
+d = 2;
+betas = .1:.05:1.8;
+J = 1;
+
+magnetizations = zeros(1, 20);
+magnetizationsExact = zeros(1, 20);
+
+for k = 1:length(betas)
+    beta = betas(k);
+    O = isingO(beta, J);
+    % algorithm 8 for finding MPS fixed point of a given MPO
+    A = randcomplex(D, d, D); % MPS tensor
+    [AL, AR, AC, C] = MixedCanonical(A); % go to mixed gauge
+    flag = true;
+    delta = 1e-4;
+    i = 0;
+    while flag
+        [lambda, FL] = leftFixedPointMPO(AL, O, delta);
+        [tst, FR] = rightFixedPointMPO(AR, O, delta);
+        lambda = real(lambda);
+        FL = FL / overlapFixedPointsMPO(FL, FR, C);
+        [ACprime, Cprime] = calcNewCenterMPO(AC, C, FL, FR, O, lambda, delta);
+        [ALprime, ARprime, ACprime, Cprime] = MinAcC(ACprime, Cprime);
+        delta = ArrayNorm(OAC(AC, FL, FR, O, lambda) - ncon({AL, OC(C, FL, FR)}, {[-1 -2 1], [1 -3]})); % calculate error using new or old AL, AR, Rh, Lh? now using old...
+        fprintf('Current error: %d\n', delta)
+        AL = ALprime; AR = ARprime; AC = ACprime; C = Cprime; % update
+        i = i+1;
+        if delta < tol
+            flag = false;
+        end
+    end
+    fprintf('Iterations needed: %i\n', i)
+    f = freeEnergyDensity(beta, lambda);
+    [~, fExact, ~] = isingExact(beta, J);
+    % check free energy
+    fprintf('Computed: %d\t\tExact: %d\n\n', f, fExact);    
+    magnetizations(k) = isingMagnetization(beta, J, AC, FL, FR) / isingZ(beta, J, AC, FL, FR);
+    magnetizationsExact(k) = isingExact(beta, J);
+end
+plot(betas, abs(magnetizations), betas, magnetizationsExact)
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -631,7 +677,7 @@ end
 
 %% VUMPS algorithm for 2-dimensional classical partition function
 
-function out = delt(n, d)
+function out = isingVertex(d, n)
     out = zeros(repmat(d, 1, n));
     for i = 1:d
         sbs = num2cell(repmat(i, 1, n));
@@ -639,52 +685,55 @@ function out = delt(n, d)
     end
 end
 
-function O = IsingO(beta, J)
+
+function O = isingO(beta, J)
     c = sqrt(cosh(beta*J)); s = sqrt(sinh(beta*J));
-    Q_sqrt = 1/sqrt(2) * [c+s, c-s; c-s, c+s];
-    O = ncon({Q_sqrt, Q_sqrt, Q_sqrt, Q_sqrt, delt(4, 2)}, {[-1, 1], [-2, 2], [-3, 3], [-4, 4], [1, 2, 3, 4]});
+    Qsqrt = 1 / sqrt(2) * [c+s, c-s; c-s, c+s];
+    O = ncon({Qsqrt, Qsqrt, Qsqrt, Qsqrt, isingVertex(2, 4)}, {[-1, 1], [-2, 2], [-3, 3], [-4, 4], [1, 2, 3, 4]});
 end
 
-function [magnetization,free,energy]=isingExact(beta, J)
-    theta=0:1e-6:pi/2;
-    x=2*sinh(2*J*beta)/cosh(2*J*beta)^2;
-    if 1-(sinh(2*J*beta))^(-4)>0
-        magnetization=(1-(sinh(2*J*beta))^(-4))^(1/8);
-    else
-        magnetization=0;
-    end
-    free=-1/beta*(log(2*cosh(2*J*beta))+1/pi*trapz(theta,log(1/2*(1+sqrt(1-x^2*sin(theta).^2)))));
-    K=trapz(theta,1./sqrt(1-x^2*sin(theta).^2));
-    energy=-J*cosh(2*J*beta)/sinh(2*J*beta)*(1+2/pi*(2*tanh(2*J*beta)^2-1)*K);
+
+function M = isingM(beta, J)
+    Z = [1, 0; 0, -1];
+    c = sqrt(cosh(beta*J));	s = sqrt(sinh(beta*J));
+    Qsqrt = 1 / sqrt(2) * [c+s, c-s; c-s, c+s];
+    vertexNew = ncon({Z, isingVertex(2,4)}, {[-1,1], [1,-2,-3,-4]});
+    M = ncon({Qsqrt, Qsqrt, Qsqrt, Qsqrt, vertexNew}, {[-1,1], [-2,2], [-3,3], [-4,4], [1,2,3,4]});
 end
 
-function [lambda, FL] = FixedPointLeft(AL, O, delta)
+
+function [lambda, FL] = leftFixedPointMPO(AL, O, delta)
     D = size(AL, 1); d = size(AL, 2);
     handleL = @(v) reshape(ncon({reshape(v, [D d D]), AL, conj(AL), O}, {[5, 3, 1], [1, 2, -3], [5 4 -1], [3 2 -2 4]}), [], 1);
     [FL, lambda] = eigs(handleL, D^2*d, 1, 'largestabs', 'Tolerance', delta/10); % left eigenvector
     FL = reshape(FL, [D d D]);
 end
 
-function [lambda, FR] = FixedPointRight(AR, O, delta)
+
+function [lambda, FR] = rightFixedPointMPO(AR, O, delta)
     D = size(AR, 1); d = size(AR, 2);
     handleR = @(v) reshape(ncon({reshape(v, [D d D]), AR, conj(AR), O}, {[1, 3, 5], [-1, 2, 1], [-3, 4, 5], [-2, 2, 3, 4]}), [], 1);
     [FR, lambda] = eigs(handleR, D^2*d, 1, 'largestabs', 'Tolerance', delta/10); % right eigenvector
     FR = reshape(FR, [D d D]);
 end
 
-function overl = OverlapFixedPoints(FL, FR, C)
+
+function overl = overlapFixedPointsMPO(FL, FR, C)
     overl = ncon({FL, FR, C, conj(C)}, {[1, 3, 2], [5, 3, 4], [2, 5], [1, 4]});
 end
+
 
 function Xprime = OAC(X, FL, FR, O, lambda)
     Xprime = ncon({FL, FR, X, O}, {[-1, 2, 1], [4, 5, -3], [1, 3, 4], [2, 3, 5, -2]}) / lambda;
 end
 
+
 function Xprime = OC(X, FL, FR)
     Xprime = ncon({FL, FR, X}, {[-1, 3, 1], [2, 3, -2], [1, 2]});
 end
 
-function [ACprime, Cprime] = CalculateNewCenter2D(AC, C, FL, FR, O, lambda, delta)
+
+function [ACprime, Cprime] = calcNewCenterMPO(AC, C, FL, FR, O, lambda, delta)
     D = size(AC, 1); d = size(AC, 2);
     % compute action of maps (256) and (257) in the notes and pour this into function handle for eigs
     handleAC = @(X) reshape(OAC(reshape(X, [D d D]), FL, FR, O, lambda), [], 1);
@@ -695,3 +744,34 @@ function [ACprime, Cprime] = CalculateNewCenter2D(AC, C, FL, FR, O, lambda, delt
     [Cprime, ~] = eigs(handleC, D^2, 1, 'largestabs', 'Tolerance', delta/10, 'StartVector', reshape(C, [], 1)); % variable tolerance
     Cprime = reshape(Cprime, [D D]);
 end
+
+
+function f = freeEnergyDensity(beta, lambda)
+    f = -log(lambda) / beta;
+end
+
+
+function m = isingMagnetization(beta, J, AC, FL, FR)
+    m = ncon({FL, AC, isingM(beta, J), conj(AC), FR}, {[1, 2, 4], [4, 5, 6], [2, 5, 7, 3], [1, 3, 8], [6, 7, 8]});
+end
+
+
+function Z = isingZ(beta, J, AC, FL, FR)
+    Z = ncon({FL, AC, isingO(beta, J), conj(AC), FR}, {[1, 2, 4], [4, 5, 6], [2, 5, 7, 3], [1, 3, 8], [6, 7, 8]});
+end
+
+
+function [magnetization, free, energy] = isingExact(beta, J)
+    theta = 0:1e-6:pi/2;
+    x = 2*sinh(2*J*beta)/cosh(2*J*beta)^2;
+    if 1-(sinh(2*J*beta))^(-4)>0
+        magnetization = (1-(sinh(2*J*beta))^(-4))^(1/8);
+    else
+        magnetization = 0;
+    end
+    free = -1/beta*(log(2*cosh(2*J*beta))+1/pi*trapz(theta,log(1/2*(1+sqrt(1-x^2*sin(theta).^2)))));
+    K = trapz(theta,1./sqrt(1-x^2*sin(theta).^2));
+    energy = -J*cosh(2*J*beta)/sinh(2*J*beta)*(1+2/pi*(2*tanh(2*J*beta)^2-1)*K);
+end
+
+
