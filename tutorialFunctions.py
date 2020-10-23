@@ -624,31 +624,24 @@ def minAcC(AcPrime, cPrime):
     C = C / np.sqrt(nrm)
     return Al, Ar, Ac, C
 
-def delta(d, n):
+def kronecker(d, n):
     out = np.zeros( (d,) * n )
     out[ tuple([np.arange(d)] * n) ] = 1
     return out
 
 def O(beta, J):
     c, s = np.sqrt(np.cosh(beta*J)), np.sqrt(np.sinh(beta*J))
-    #test
-    #Q = np.array([[np.exp(beta), np.exp(-beta)],[np.exp(-beta), np.exp(beta)]])
-    #Q_sqrt_ = sqrtm(Q)
-    Q_sqrt = 1/2 * np.array([[c+s, c-s],[c-s, c+s]])
-    O = ncon((Q_sqrt, Q_sqrt, Q_sqrt, Q_sqrt, delta(2,4)), ([-1,1], [-2,2], [-3,3], [-4,4], [1,2,3,4]))
+    Q_sqrt = 1/np.sqrt(2) * np.array([[c+s, c-s],[c-s, c+s]])
+    O = ncon((Q_sqrt, Q_sqrt, Q_sqrt, Q_sqrt, kronecker(2,4)), ([-1,1], [-2,2], [-3,3], [-4,4], [1,2,3,4]))
     return O
 
 def M(beta, J):
     S_z = np.array([[1,0],[0,-1]])
     c, s = np.sqrt(np.cosh(beta*J)), np.sqrt(np.sinh(beta*J))
     Q_sqrt = 1/np.sqrt(2) * np.array([[c+s, c-s],[c-s, c+s]])
-    delta_new = ncon((S_z, delta(2,4)), ([-1,1], [1,-2,-3,-4]))
+    delta_new = ncon((S_z, kronecker(2,4)), ([-1,1], [1,-2,-3,-4]))
     M = ncon((Q_sqrt, Q_sqrt, Q_sqrt, Q_sqrt, delta_new), ([-1,1], [-2,2], [-3,3], [-4,4], [1,2,3,4]))
     return M
-
-def free_energy_density(beta, J):
-    Lambda=1
-    return -np.log(Lambda)
 
 def partitionLeft(Al, O, delta):
     D = Al.shape[0]
@@ -689,6 +682,9 @@ def partitionCenter(Ac, C, Fl, Fr, O, lam, delta):
     _, cPrime = eigs(handleC, k=1, which="LM", v0=C.reshape(-1), tol=delta / 10)
     return AcPrime.reshape(D, d, D), cPrime.reshape(D, D)
 
+def Magnetization(beta, J, Ac, Fl, Fr):
+    M_exp = ncon((Fl, Ac, M(beta, J), np.conj(Ac), Fr), ([1, 3, 2], [2,7,5],[3,7,8,6],[1,6,4], [5,8,4]))
+    return M_exp
 #### vumps to calculate ising partition function
 
 D = 12
@@ -696,6 +692,7 @@ d = 2
 A = createMPS(D,d)
 Al, Ar, Ac, C = mixedCanonical(A)
 beta = 0.440686793509772 #critical point
+J=1
 O = O(beta,1)
 delta = 1e-4
 tol = 1e-3
