@@ -4,6 +4,8 @@ from scipy.sparse.linalg import eigs, LinearOperator, gmres
 from scipy.optimize import minimize
 from functools import partial
 from ncon import ncon
+import matplotlib.pyplot as plt
+
 
 def createMPS(bondDimension, physDimension):
     # function to create a random MPS tensor for some bondDimension and physical dimension.
@@ -640,9 +642,6 @@ def isingO(beta, J):
     O = ncon((Qsqrt, Qsqrt, Qsqrt, Qsqrt, isingVertex(2,4)), ([-1,1], [-2,2], [-3,3], [-4,4], [1,2,3,4]))
     return O
 
-<<<<<<< HEAD
-def partitionLeft(Al, O, delta):
-=======
 
 def isingM(beta, J):
     Z = np.array([[1,0],[0,-1]])
@@ -654,7 +653,6 @@ def isingM(beta, J):
 
 
 def leftFixedPointMPO(Al, O, delta):
->>>>>>> 5b196baedba0c720efa0ae1aef86551112758660
     D = Al.shape[0]
     d = Al.shape[1]
     transferLeftHandleMPO = lambda v: (ncon((v.reshape((D,d,D)), Al, np.conj(Al), O),([5, 3, 1], [1, 2, -3], [5, 4, -1], [3, 2, -2, 4]))).reshape(-1)
@@ -688,51 +686,6 @@ def OC(X, Fl, Fr):
 def calcNewCenterMPO(Ac, C, Fl, Fr, O, lam, delta):
     D = Fl.shape[0]
     d = Fl.shape[1]
-<<<<<<< HEAD
-    handleAc = lambda v: (oAc(v.reshape(D, d, D), Fl, Fr, O, lam)).reshape(-1)
-    handleAc = LinearOperator((D ** 2 * d, D ** 2 * d), matvec=handleAc)
-    handleC = lambda v: (oC(v.reshape(D, D), Fl, Fr)).reshape(-1)
-    handleC = LinearOperator((D ** 2, D ** 2), matvec=handleC)
-    _, AcPrime = eigs(handleAc, k=1, which="LM", v0=Ac.reshape(-1), tol=delta / 10)
-    _, cPrime = eigs(handleC, k=1, which="LM", v0=C.reshape(-1), tol=delta / 10)
-    return AcPrime.reshape(D, d, D), cPrime.reshape(D, D)
-
-
-if __name__ == '__main__':
-    
-    #### vumps to calculate ising partition function
-    D = 12
-    d = 2
-    A = createMPS(D,d)
-    Al, Ar, Ac, C = mixedCanonical(A)
-    beta, J = 0.440686793509772, 1 #critical point
-    
-    O = O_tensor(beta,1)
-    delta = 1e-4
-    tol = 1e-3
-    flag = 1
-        
-    while flag:
-        lam, Fl = partitionLeft(Al, O, delta)
-        _ , Fr = partitionLeft(Ar, O, delta)
-        overlap = overlapPartitionsFlFr(Fl, Fr, C)
-        Fl = Fl/overlap
-        lam = np.real(lam)[0]
-        AcPrime, cPrime = partitionCenter(Ac, C, Fl, Fr, O, lam, delta)
-        AlPrime, ArPrime, AcPrime, cPrime = minAcC(AcPrime, cPrime)
-        delta = np.linalg.norm(oAc(Ac, Fl, Fr, O, lam) - ncon((Al, oC(C, Fl, Fr)), ([-1, -2, 1], [1, -3])))
-        Al = AlPrime
-        Ar = ArPrime
-        Ac = AcPrime
-        C = cPrime
-        print(delta)
-        if delta < tol:
-            flag = 0
-
-
-
-        
-=======
     handleAc = lambda X: (OAc(X.reshape((D,d,D)), Fl, Fr, O, lam)).reshape(-1)
     handleAc = LinearOperator((D**2*d, D**2*d), matvec=handleAc)
     handleC = lambda X: (OC(X.reshape(D, D), Fl, Fr)).reshape(-1)
@@ -765,4 +718,3 @@ def isingExact(beta, J):
     K = np.trapz(1 / np.sqrt(1 - x ** 2 * np.sin(theta) ** 2), theta)
     energy = -J * np.cosh(2 * J * beta) / np.sinh(2 * J * beta) * (1 + 2 / np.pi * (2 * np.tanh(2 * J * beta) ** 2 - 1) * K)
     return magnetization, free, energy
->>>>>>> 5b196baedba0c720efa0ae1aef86551112758660
