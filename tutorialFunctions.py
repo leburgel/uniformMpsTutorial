@@ -642,3 +642,7 @@ def M(beta, J):
     delta_new = np.einsum('im, mjkl-> ijkl', S_z,delta(2,4))
     M = np.einsum('im, jn, ok, pl, mnop-> ijkl', Q_sqrt, Q_sqrt, Q_sqrt, Q_sqrt, delta_new)
     return M
+
+def free_energy(beta, J):
+    Lambda=1
+    return -np.log(Lambda)
