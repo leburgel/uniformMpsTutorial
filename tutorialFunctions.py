@@ -1,5 +1,5 @@
 import numpy as np
-from scipy.linalg import rq, qr, svd, polar
+from scipy.linalg import rq, qr, svd, polar, sqrtm
 from scipy.sparse.linalg import eigs, LinearOperator, gmres
 from scipy.optimize import minimize
 from functools import partial
@@ -639,7 +639,10 @@ def delta(d, n):
 
 def O(beta, J):
     c, s = np.sqrt(np.cosh(beta*J)), np.sqrt(np.sinh(beta*J))
-    Q_sqrt = 1/np.sqrt(2) * np.array([[c+s, c-s],[c-s, c+s]])
+    #test
+    #Q = np.array([[np.exp(beta), np.exp(-beta)],[np.exp(-beta), np.exp(beta)]])
+    #Q_sqrt_ = sqrtm(Q)
+    Q_sqrt = 1/2 * np.array([[c+s, c-s],[c-s, c+s]])
     O = ncon((Q_sqrt, Q_sqrt, Q_sqrt, Q_sqrt, delta(2,4)), ([-1,1], [-2,2], [-3,3], [-4,4], [1,2,3,4]))
     return O
 
@@ -651,6 +654,74 @@ def M(beta, J):
     M = ncon((Q_sqrt, Q_sqrt, Q_sqrt, Q_sqrt, delta_new), ([-1,1], [-2,2], [-3,3], [-4,4], [1,2,3,4]))
     return M
 
-def free_energy(beta, J):
+def free_energy_density(beta, J):
     Lambda=1
     return -np.log(Lambda)
+
+def partitionLeft(Al, O, delta):
+    D = Al.shape[0]
+    d = Al.shape[1]
+    partTlHandle = lambda v: (ncon((v.reshape(D, d, D),Al,np.conj(Al), O),([5, 3, 1], [1, 2, -3], [5, 4, -1], [3, 2, -2, 4]))).reshape(-1)
+    partTl = LinearOperator((D*d*D, D*d*D), matvec=partTlHandle)
+    lam, Fl = eigs(partTl,k=1,which="LM",  tol=delta/10)
+    return lam, Fl.reshape(D,d,D)
+
+def partitionRight(Ar, O, delta):
+    D = Ar.shape[0]
+    d = Ar.shape[1]
+    partTrHandle = lambda v: (ncon((v.reshape(D, d, D), Ar, np.conj(Ar), O), ([1, 3, 5], [-1, 2, 1], [-3, 4, 5], [-2, 2, 3, 4]))).reshape(-1)
+    partTr = LinearOperator((D * d * D, D * d * D), matvec=partTrHandle)
+    lam, Fr = eigs(partTr, k=1, which="LM", tol=delta/10)
+    return lam, Fr.reshape(D, d, D)
+
+def overlapPartitionsFlFr(Fl, Fr, C):
+    overlap = ncon((Fl, Fr, C, np.conj(C)), ([1, 3, 2], [5, 3, 4], [2, 5], [1, 4]))
+    return overlap
+
+def oAc(v, Fl, Fr, O, lam):
+    opA = ncon((Fl, Fr, v, O),([-1, 2, 1], [4, 5, -3], [1, 3, 4], [2, 3, 5, -2]))/lam
+    return opA
+
+def oC(v, Fl, Fr):
+    opC = ncon((Fl, Fr, v), ([-1, 3, 1], [2, 3, -2], [1, 2]))
+    return opC
+
+def partitionCenter(Ac, C, Fl, Fr, O, lam, delta):
+    D = Fl.shape[0]
+    d = Fl.shape[1]
+    handleAc = lambda v: (oAc(v.reshape(D, d, D), Fl, Fr, O, lam)).reshape(-1)
+    handleAc = LinearOperator((D ** 2 * d, D ** 2 * d), matvec=handleAc)
+    handleC = lambda v: (oC(v.reshape(D, D), Fl, Fr)).reshape(-1)
+    handleC = LinearOperator((D ** 2, D ** 2), matvec=handleC)
+    _, AcPrime = eigs(handleAc, k=1, which="LM", v0=Ac.reshape(-1), tol=delta / 10)
+    _, cPrime = eigs(handleC, k=1, which="LM", v0=C.reshape(-1), tol=delta / 10)
+    return AcPrime.reshape(D, d, D), cPrime.reshape(D, D)
+
+#### vumps to calculate ising partition function
+
+D = 12
+d = 2
+A = createMPS(D,d)
+Al, Ar, Ac, C = mixedCanonical(A)
+beta = 0.440686793509772 #critical point
+O = O(beta,1)
+delta = 1e-4
+tol = 1e-3
+flag = 1
+
+while flag:
+    lam, Fl = partitionLeft(Al, O, delta)
+    _ , Fr = partitionLeft(Ar, O, delta)
+    overlap = overlapPartitionsFlFr(Fl, Fr, C)
+    Fl = Fl/overlap
+    lam = np.real(lam)[0]
+    AcPrime, cPrime = partitionCenter(Ac, C, Fl, Fr, O, lam, delta)
+    AlPrime, ArPrime, AcPrime, cPrime = minAcC(AcPrime, cPrime)
+    delta = np.linalg.norm(oAc(Ac, Fl, Fr, O, lam) - ncon((Al, oC(C, Fl, Fr)), ([-1, -2, 1], [1, -3])))
+    Al = AlPrime
+    Ar = ArPrime
+    Ac = AcPrime
+    C = cPrime
+    print(delta)
+    if delta < tol:
+        flag = 0
