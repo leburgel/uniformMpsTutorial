@@ -31,7 +31,7 @@ if False:
     #pr.enable()
     EnergyHandle = partial(energyWrapper, H, D, d)
     t0 = time()
-    res = minimize(EnergyHandle, varA, jac=True,tol=1e-4)
+    res = minimize(EnergyHandle, varA, jac=True, tol=1e-4)
     print('Time for gradient descent optimization:', time()-t0, 's')
     Aopt = res.x
     print('Procedure converged at energy', res.fun, '\n')
