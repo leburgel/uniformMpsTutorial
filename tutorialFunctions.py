@@ -635,7 +635,7 @@ def O(beta, J):
     O = ncon((Q_sqrt, Q_sqrt, Q_sqrt, Q_sqrt, delta(2,4)), ([-1,1], [-2,2], [-3,3], [-4,4], [1,2,3,4]))
     return O
 
-def M_ncon(beta, J):
+def M(beta, J):
     S_z = np.array([[1,0],[0,-1]])
     c, s = np.sqrt(np.cosh(beta*J)), np.sqrt(np.sinh(beta*J))
     Q_sqrt = 1/np.sqrt(2) * np.array([[c+s, c-s],[c-s, c+s]])
