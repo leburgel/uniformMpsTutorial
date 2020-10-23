@@ -480,6 +480,7 @@ def energyDensity(A, H):
 
     return e, g
 
+
 def energyWrapper(H, D, d, varA):
     """
     Wrapper around energyDensity function that takes complex MPS tensor of
@@ -514,7 +515,7 @@ def energyWrapper(H, D, d, varA):
     g = np.concatenate((np.real(g).reshape(-1), np.imag(g).reshape(-1)))
     return e, g
 
-#### functions for vumps
+#### functions for Hamiltonian vumps
 
 def rightEnvMixed(Ar, C, Htilde, delta):
     '''
@@ -534,7 +535,7 @@ def rightEnvMixed(Ar, C, Htilde, delta):
     
     return Rh.reshape(D, D)
 
-#left environment vumps
+
 def leftEnvMixed(Al, C, Htilde, delta):
     '''
     :param Al:
@@ -549,6 +550,7 @@ def leftEnvMixed(Al, C, Htilde, delta):
     Lh = gmres(transfer_Left, xL.reshape(-1), tol=delta/10)[0]
 
     return Lh.reshape(D, D)
+
 
 def H_Ac(v, Al, Ar, Rh, Lh, Htilde):
     '''
@@ -567,6 +569,7 @@ def H_Ac(v, Al, Ar, Rh, Lh, Htilde):
     
     return centerTerm1 + centerTerm2 + leftEnvTerm + rightEnvTerm
 
+
 def H_C(v, Al, Ar, Rh, Lh, Htilde):
     '''
     :param v:
@@ -582,6 +585,7 @@ def H_C(v, Al, Ar, Rh, Lh, Htilde):
     rightEnvTerm = v @ Rh
 
     return centerTerm + leftEnvTerm + rightEnvTerm
+
 
 def calcNewCenter(Al, Ar, Ac, C, Lh, Rh, Htilde, delta):
     '''
@@ -604,6 +608,7 @@ def calcNewCenter(Al, Ar, Ac, C, Lh, Rh, Htilde, delta):
     _, cPrime = eigs(handleC, k=1, which="SR", v0=C.reshape(-1), tol=delta/10)
     return AcPrime.reshape((D,d,D)), cPrime.reshape((D,D))
 
+
 def minAcC(AcPrime, cPrime):
     '''
     :param AcPrime:
@@ -615,62 +620,75 @@ def minAcC(AcPrime, cPrime):
     UlAc, _ = polar(AcPrime.reshape(D*d,D))
     UlC, _ = polar(cPrime)
     Al = (UlAc @ np.conj(UlC).T).reshape(D, d, D)
-    # # OPTION 1: OLD
-    # _, Ar = rightOrthonormal(Al)
-    # Ac = AcPrime
-    # C = cPrime
-    # nrm = np.trace(C @ np.conj(C).T)
-    # Ac = Ac / np.sqrt(nrm)
-    # C = C / np.sqrt(nrm)
-    # OPTION 2: NEW
     C, Ar = rightOrthonormal(Al)
     nrm = np.trace(C @ np.conj(C).T)
     C = C / np.sqrt(nrm)
     Ac = ncon((Al, C), ([-1, -2, 1], [1, -3]))
     return Al, Ar, Ac, C
 
-def kronecker(d, n):
+#### functions for mpo vumps + 2d partition functions
+
+def isingVertex(d, n):
     out = np.zeros( (d,) * n )
-    out[ tuple([np.arange(d)] * n) ] = 1
+    out[tuple([np.arange(d)] * n)] = 1
     return out
 
-def O_tensor(beta, J):
+
+def isingO(beta, J):
     c, s = np.sqrt(np.cosh(beta*J)), np.sqrt(np.sinh(beta*J))
-    Q_sqrt = 1/np.sqrt(2) * np.array([[c+s, c-s],[c-s, c+s]])
-    O = ncon((Q_sqrt, Q_sqrt, Q_sqrt, Q_sqrt, kronecker(2,4)), ([-1,1], [-2,2], [-3,3], [-4,4], [1,2,3,4]))
+    Qsqrt = 1/2 * np.array([[c+s, c-s],[c-s, c+s]])
+    O = ncon((Qsqrt, Qsqrt, Qsqrt, Qsqrt, isingVertex(2,4)), ([-1,1], [-2,2], [-3,3], [-4,4], [1,2,3,4]))
     return O
 
+<<<<<<< HEAD
 def partitionLeft(Al, O, delta):
+=======
+
+def isingM(beta, J):
+    Z = np.array([[1,0],[0,-1]])
+    c, s = np.sqrt(np.cosh(beta*J)), np.sqrt(np.sinh(beta*J))
+    Qsqrt = 1/np.sqrt(2) * np.array([[c+s, c-s],[c-s, c+s]])
+    vertexNew = ncon((Z, isingVertex(2,4)), ([-1,1], [1,-2,-3,-4]))
+    M = ncon((Qsqrt, Qsqrt, Qsqrt, Qsqrt, vertexNew), ([-1,1], [-2,2], [-3,3], [-4,4], [1,2,3,4]))
+    return M
+
+
+def leftFixedPointMPO(Al, O, delta):
+>>>>>>> 5b196baedba0c720efa0ae1aef86551112758660
     D = Al.shape[0]
     d = Al.shape[1]
-    partTlHandle = lambda v: (ncon((v.reshape(D, d, D),Al,np.conj(Al), O),([5, 3, 1], [1, 2, -3], [5, 4, -1], [3, 2, -2, 4]))).reshape(-1)
-    partTl = LinearOperator((D*d*D, D*d*D), matvec=partTlHandle)
-    lam, Fl = eigs(partTl,k=1,which="LM",  tol=delta/10)
-    return lam, Fl.reshape(D,d,D)
+    transferLeftHandleMPO = lambda v: (ncon((v.reshape((D,d,D)), Al, np.conj(Al), O),([5, 3, 1], [1, 2, -3], [5, 4, -1], [3, 2, -2, 4]))).reshape(-1)
+    transferLeftMPO = LinearOperator((D**2*d, D**2*d), matvec=transferLeftHandleMPO)
+    lam, Fl = eigs(transferLeftMPO, k=1, which="LM", tol=delta/10)
+    return lam, Fl.reshape((D,d,D))
 
-def partitionRight(Ar, O, delta):
+
+def rightFixedPointMPO(Ar, O, delta):
     D = Ar.shape[0]
     d = Ar.shape[1]
-    partTrHandle = lambda v: (ncon((v.reshape(D, d, D), Ar, np.conj(Ar), O), ([1, 3, 5], [-1, 2, 1], [-3, 4, 5], [-2, 2, 3, 4]))).reshape(-1)
-    partTr = LinearOperator((D * d * D, D * d * D), matvec=partTrHandle)
-    lam, Fr = eigs(partTr, k=1, which="LM", tol=delta/10)
-    return lam, Fr.reshape(D, d, D)
+    transferRightHandleMPO = lambda v: (ncon((v.reshape(D, d, D), Ar, np.conj(Ar), O), ([1, 3, 5], [-1, 2, 1], [-3, 4, 5], [-2, 2, 3, 4]))).reshape(-1)
+    transferRightMPO = LinearOperator((D**2*d, D**2*d), matvec=transferRightHandleMPO)
+    lam, Fr = eigs(transferRightMPO, k=1, which="LM", tol=delta/10)
+    return lam, Fr.reshape((D,d,D))
 
-def overlapPartitionsFlFr(Fl, Fr, C):
+
+def overlapFixedPointsMPO(Fl, Fr, C):
     overlap = ncon((Fl, Fr, C, np.conj(C)), ([1, 3, 2], [5, 3, 4], [2, 5], [1, 4]))
     return overlap
 
-def oAc(v, Fl, Fr, O, lam):
-    opA = ncon((Fl, Fr, v, O),([-1, 2, 1], [4, 5, -3], [1, 3, 4], [2, 3, 5, -2]))/lam
-    return opA
 
-def oC(v, Fl, Fr):
-    opC = ncon((Fl, Fr, v), ([-1, 3, 1], [2, 3, -2], [1, 2]))
-    return opC
+def OAc(X, Fl, Fr, O, lam):
+    return ncon((Fl, Fr, X, O),([-1, 2, 1], [4, 5, -3], [1, 3, 4], [2, 3, 5, -2]))/lam
 
-def partitionCenter(Ac, C, Fl, Fr, O, lam, delta):
+
+def OC(X, Fl, Fr):
+    return ncon((Fl, Fr, X), ([-1, 3, 1], [2, 3, -2], [1, 2]))
+
+
+def calcNewCenterMPO(Ac, C, Fl, Fr, O, lam, delta):
     D = Fl.shape[0]
     d = Fl.shape[1]
+<<<<<<< HEAD
     handleAc = lambda v: (oAc(v.reshape(D, d, D), Fl, Fr, O, lam)).reshape(-1)
     handleAc = LinearOperator((D ** 2 * d, D ** 2 * d), matvec=handleAc)
     handleC = lambda v: (oC(v.reshape(D, D), Fl, Fr)).reshape(-1)
@@ -714,3 +732,37 @@ if __name__ == '__main__':
 
 
         
+=======
+    handleAc = lambda X: (OAc(X.reshape((D,d,D)), Fl, Fr, O, lam)).reshape(-1)
+    handleAc = LinearOperator((D**2*d, D**2*d), matvec=handleAc)
+    handleC = lambda X: (OC(X.reshape(D, D), Fl, Fr)).reshape(-1)
+    handleC = LinearOperator((D**2, D**2), matvec=handleC)
+    _, AcPrime = eigs(handleAc, k=1, which="LM", v0=Ac.reshape(-1), tol=delta/10)
+    _, cPrime = eigs(handleC, k=1, which="LM", v0=C.reshape(-1), tol=delta/10)
+    return AcPrime.reshape((D,d,D)), cPrime.reshape((D,D))
+
+
+def freeEnergyDensity(beta, lam):
+    return -np.log(lam) / beta
+
+
+def isingMagnetization(beta, J, Ac, Fl, Fr):
+    return ncon((Fl, Ac, isingM(beta, J), np.conj(Ac), Fr), ([1, 3, 2], [2,7,5],[3,7,8,6],[1,6,4], [5,8,4]))
+
+
+def isingZ(beta, J, Ac, Fl, Fr):
+    return ncon((Fl, Ac, isingO(beta, J), np.conj(Ac), Fr), ([1, 3, 2], [2,7,5],[3,7,8,6],[1,6,4], [5,8,4]))
+
+
+def isingExact(beta, J):
+    theta = np.arange(0, np.pi/2, 1e-6)
+    x = 2 * np.sinh(2 * J * beta) / np.cosh(2 * J * beta) ** 2
+    if 1 - (np.sinh(2 * J * beta)) ** (-4) > 0:
+        magnetization = (1 - (np.sinh(2 * J * beta)) ** (-4)) ** (1 / 8)
+    else:
+        magnetization = 0
+    free = -1 / beta * (np.log(2 * np.cosh(2 * J * beta)) + 1 / np.pi * np.trapz(np.log(1 / 2 * (1 + np.sqrt(1 - x ** 2 * np.sin(theta) ** 2))), theta))
+    K = np.trapz(1 / np.sqrt(1 - x ** 2 * np.sin(theta) ** 2), theta)
+    energy = -J * np.cosh(2 * J * beta) / np.sinh(2 * J * beta) * (1 + 2 / np.pi * (2 * np.tanh(2 * J * beta) ** 2 - 1) * K)
+    return magnetization, free, energy
+>>>>>>> 5b196baedba0c720efa0ae1aef86551112758660
