@@ -623,3 +623,9 @@ def minAcC(AcPrime, cPrime):
     Ac = Ac / np.sqrt(nrm)
     C = C / np.sqrt(nrm)
     return Al, Ar, Ac, C
+
+def O(beta, J):
+    c, s = np.sqrt(np.cosh(beta*J)), np.sqrt(np.sinh(beta*J))
+    Q_sqrt = 1/np.sqrt(2) * np.array([[c+s, c-s],[c-s, c+s]])
+    O = np.einsum('im, jm, mk, ml-> ijkl', Q_sqrt, Q_sqrt, Q_sqrt, Q_sqrt)
+    return O
