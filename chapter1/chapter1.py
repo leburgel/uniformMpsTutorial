@@ -6,6 +6,7 @@ Summary of all functions used and defined in notebook chapter 1
 import numpy as np
 from scipy.linalg import rq, qr, svd
 from scipy.sparse.linalg import eigs, LinearOperator
+from ncon import ncon
 
 
 def createMPS(D, d):
@@ -49,7 +50,7 @@ def createTransfermatrix(A):
             ordered topLeft-bottomLeft-topRight-bottomRight.
     """
 
-    E = np.einsum('isk,jsl->ijkl', A, np.conj(A))
+    E = np.einsum('isk,jsl->ijkl', A, np.conj(A)) # TODO swap for ncon
 
     return E
 
@@ -78,16 +79,12 @@ def normaliseMPS(A):
 
     D = A.shape[0]
 
-    # set optimal contraction sequence
-    path = ['einsum_path', (0, 2), (0, 1)]
-
     # calculate transfer matrix handle and cast to LinearOperator
-    handleEright = lambda v: np.reshape(np.einsum('ijk,ljm,km->il', A, np.conj(A), v.reshape((D, D)), optimize=path),
+    handleERight = lambda v: np.reshape(ncon((A, np.conj(A), v.reshape((D,D))), ([-1, 2, 1], [-2, 2, 3], [1, 3])),
                                         D ** 2)
-    E = LinearOperator((D ** 2, D ** 2), matvec=handleEright)
+    E = LinearOperator((D ** 2, D ** 2), matvec=handleERight)
 
     # calculate eigenvalue
-    # noinspection PyTypeChecker
     lam = eigs(E, k=1, which='LM', return_eigenvectors=False)
 
     Anew = A / np.sqrt(lam)
@@ -123,8 +120,7 @@ def leftFixedPoint(A):
     path = ['einsum_path', (0, 2), (0, 1)]
 
     # calculate transfer matrix handle and cast to LinearOperator
-    handleELeft = lambda v: np.reshape(np.einsum('ijk,ljm,li->mk', A, np.conj(A), v.reshape((D, D)), optimize=path),
-                                       D ** 2)
+    handleELeft = lambda v: np.reshape(ncon((A, np.conj(A), v.reshape((D, D))), ([1, 2, -2], [3, 2, -1], [3, 1])), D ** 2)
     E = LinearOperator((D ** 2, D ** 2), matvec=handleELeft)
 
     # calculate fixed point
@@ -161,8 +157,7 @@ def rightFixedPoint(A):
     path = ['einsum_path', (0, 2), (0, 1)]
 
     # calculate transfer matrix handle and cast to LinearOperator
-    handleEright = lambda v: np.reshape(np.einsum('ijk,ljm,km->il', A, np.conj(A), v.reshape((D, D)), optimize=path),
-                                        D ** 2)
+    handleEright = lambda v: np.reshape(ncon((A, np.conj(A), v.reshape((D,D))), ([-1, 2, 1], [-2, 2, 3], [1, 3])), D ** 2)
     E = LinearOperator((D ** 2, D ** 2), matvec=handleEright)
 
     # calculate fixed point
@@ -200,7 +195,7 @@ def fixedPoints(A):
     l, r = leftFixedPoint(A), rightFixedPoint(A)
 
     # calculate trace
-    trace = np.einsum('ji,ij', l, r)
+    trace = np.trace(l@r)
 
     return l / np.sqrt(trace), r / np.sqrt(trace)
 
@@ -285,14 +280,14 @@ def rightOrthonormalise(A, R0=None, tol=1e-14, maxIter=1e5):
     R0 = R0 / np.linalg.norm(R0)
 
     # Initialise loop
-    R, Ar = rqPos(np.resize(np.einsum('ijk,kl->ijl', A, R0), (D, D * d)))
+    R, Ar = rqPos(np.resize(ncon((A, R0), ([-1, -2, 1], [1, -3])), (D, D * d)))
     R = R / np.linalg.norm(R)
     convergence = np.linalg.norm(R - R0)
 
     # Decompose A*R until R converges
     while convergence > tol:
         # calculate AR and decompose
-        Rnew, Ar = rqPos(np.resize(np.einsum('ijk,kl->ijl', A, R), (D, D * d)))
+        Rnew, Ar = rqPos(np.resize(ncon((A, R), ([-1, -2, 1], [1, -3])), (D, D * d)))
 
         # normalise new R
         Rnew = Rnew / np.linalg.norm(Rnew)  # only necessary when working with unnormalised MPS ?
@@ -390,14 +385,14 @@ def leftOrthonormalise(A, L0=None, tol=1e-14, maxIter=1e5):
     L0 = L0 / np.linalg.norm(L0)
 
     # Initialise loop
-    Al, L = qrPos(np.resize(np.einsum('ik,ksj->isj', L0, A), (D * d, D)))
+    Al, L = qrPos(np.resize(ncon((L0, A), ([-1, 1], [1, -2, -3])), (D * d, D)))
     L = L / np.linalg.norm(L)
     convergence = np.linalg.norm(L - L0)
 
     # Decompose L*A until L converges
     while convergence > tol:
         # calculate LA and decompose
-        Al, Lnew = qrPos(np.resize(np.einsum('ik,ksj->isj', L, A), (D * d, D)))
+        Al, Lnew = qrPos(np.resize(ncon((L, A), ([-1, 1], [1, -2, -3])), (D * d, D)))
 
         # normalise new L
         Lnew = Lnew / np.linalg.norm(Lnew)  # only necessary when working with unnormalised MPS?
@@ -415,7 +410,7 @@ def leftOrthonormalise(A, L0=None, tol=1e-14, maxIter=1e5):
     return L, np.resize(Al, (D, d, D))
 
 
-def mixedCanonical(A):
+def mixedCanonical(A, L0=None, R0=None, tol=1e-14, maxIter=1e5):
     """
     Bring MPS tensor into mixed gauge, such that -Al-C- = -C-Ar- = Ac.
 
@@ -451,9 +446,17 @@ def mixedCanonical(A):
 
     D = A.shape[0]
 
+    # Random guess for  L0 if none specified
+    if L0 is None:
+        L0 = np.random.rand(D, D)
+
+    # Random guess for  R0 if none specified
+    if R0 is None:
+        R0 = np.random.rand(D, D)
+
     # Compute left and right orthonormal forms
-    L, Al = leftOrthonormalise(A)
-    R, Ar = rightOrthonormalise(A)
+    L, Al = leftOrthonormalise(A, L0, tol, maxIter)
+    R, Ar = rightOrthonormalise(A, R0, tol, maxIter)
 
     # center matrix C is matrix multiplication of L and R
     C = L @ R
@@ -463,16 +466,15 @@ def mixedCanonical(A):
     C = np.diag(S)
 
     # absorb corresponding unitaries in Al and Ar
-    Al = np.einsum('ij,jkl,lm->ikm', np.conj(U).T, Al, U)
-    Ar = np.einsum('ij,jkl,lm->ikm', Vdag, Ar, np.conj(Vdag).T)
+    Al = ncon((np.conj(U).T, Al, U), ([-1, 1], [1, -2, 2], [2, -3]))
+    Ar = ncon((Vdag, Ar, np.conj(Vdag).T), ([-1, 1], [1, -2, 2], [2, -3]))
+
+    # normalise center matrix
+    norm = np.trace(C @ np.conj(C).T)
+    C /= np.sqrt(norm)
 
     # compute center MPS tensor
-    Ac = np.einsum('ijk,kl->ijl', Al, C)
-
-    # normalise MPS in mixed gauge
-    norm = np.einsum('ijk,ijk', Ac, np.conj(Ac))
-    Ac /= np.sqrt(norm)
-    C = C / np.sqrt(norm)
+    Ac = ncon((Al, C), ([-1, -2, 1], [1, -3]))
 
     return Al, Ac, Ar, C
 
@@ -544,15 +546,15 @@ def truncateMPS(A, Dtrunc):
     S = S[:Dtrunc]
 
     # reabsorb unitaries
-    AlTilde = np.einsum('ij,jkl,lm->ikm', np.conj(U).T, Al, U)
-    ArTilde = np.einsum('ij,jkl,lm->ikm', Vdag, Ar, np.conj(Vdag).T)
-    AcTilde = np.einsum('ij,jkl,lm->ikm', np.conj(U).T, Ac, np.conj(Vdag).T)
+    AlTilde = ncon((np.conj(U).T, Al, U), ([-1, 1], [1, -2, 2], [2, -3]))
+    ArTilde = ncon((Vdag, Ar, np.conj(Vdag).T), ([-1, 1], [1, -2, 2], [2, -3]))
     CTilde = np.diag(S)
 
     # renormalise
-    norm = np.einsum('ijk,ijk', AcTilde, np.conj(AcTilde))
-    AcTilde = AcTilde / np.sqrt(norm)
-    CTilde = CTilde / np.sqrt(norm)
+    norm = np.trace(C @ np.conj(C).T)
+    C /= np.sqrt(norm)
+
+    AcTilde = ncon((Al, C), ([-1, -2, 1], [1, -3]))
 
     return AlTilde, AcTilde, ArTilde, CTilde
 
@@ -586,7 +588,7 @@ def expVal1Uniform(O, A, l=None, r=None):
         l, r = fixedPoints(A)
 
     # contract expectation value network
-    o = np.einsum('ijk,mnl,mi,kl,jn', A, np.conj(A), l, r, O)
+    o = ncon((l, r, A, np.conj(A), O), ([4, 1], [3, 6], [1, 2, 3], [4, 5, 6], [2, 5]))
 
     return o
 
@@ -611,7 +613,7 @@ def expVal1Mixed(O, Ac):
     """
 
     # contract expectation value network
-    o = np.einsum('ijk,jl,ilk', Ac, O, np.conj(Ac))
+    o = ncon((Ac, np.conj(Ac), O), ([1, 2, 3], [1, 4, 3], [2, 4]), order=[2, 1, 3, 4])
 
     return o
 
@@ -645,11 +647,8 @@ def expVal2Uniform(O, A, l=None, r=None):
     if l is None or r is None:
         l, r = fixedPoints(A)
 
-    # specify optimal sequence
-    path = 'einsum_path', (0, 5), (0, 4), (0, 1, 2, 3, 4)
-
     # contract expectation value network
-    o = np.einsum('ijk,klm,jlqo,rqp,pon,ri,mn', A, A, O, np.conj(A), np.conj(A), l, r, optimize=path)
+    o = ncon((l, r, A, A, np.conj(A), np.conj(A), O), ([6, 1], [5, 10], [1, 2, 3], [3, 4, 5], [6, 7, 8], [8, 9, 10], [2, 4, 7, 9]))
 
     return o
 
@@ -679,6 +678,6 @@ def expVal2Mixed(O, Ac, Ar):
     """
 
     # contract expectation value network
-    o = np.einsum('ijk,klm,jlpn,ipo,onm', Ac, Ar, O, np.conj(Ac), np.conj(Ar), optimize=True)
+    o = ncon((Ac, Ar, np.conj(Ac), np.conj(Ar), O), ([1, 2, 3], [3, 4, 5], [1, 6, 7], [7, 8, 5], [2, 4, 6, 8]), order=[3, 2, 4, 1, 6, 5, 8, 7])
 
     return o

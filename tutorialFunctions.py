@@ -33,7 +33,7 @@ def leftFixedPoint(A):
 
     # construct transfer matrix handle and cast to LinearOperator
     transferLeftHandle = lambda v: np.reshape(
-        ncon((A, np.conj(A), v.reshape((D,D))), ([1, 2, -2], [3, 2, -1], [3, 1]))
+        ncon((A, np.conj(A), v.reshape((D, D))), ([1, 2, -2], [3, 2, -1], [3, 1]))
         , D**2)
     transferLeft = LinearOperator((D ** 2, D ** 2), matvec=transferLeftHandle)
 
@@ -275,7 +275,7 @@ def mixedCanonical(A, L0=None, R0=None, tol=1e-14, maxIter=1e5):
     
     # Compute left and right orthonormal forms
     L, Al = leftOrthonormal(A, L0, tol, maxIter)
-    R, Ar = rightOrthonormal(A, L0, tol, maxIter)
+    R, Ar = rightOrthonormal(A, R0, tol, maxIter)
     
     # center matrix C is matrix multiplication of L and R
     C = L @ R
@@ -290,7 +290,7 @@ def mixedCanonical(A, L0=None, R0=None, tol=1e-14, maxIter=1e5):
     
     # normalise center matrix
     nrm = np.trace(C @ np.conj(C).T)
-    C /= np.sqrt(nrm);
+    C /= np.sqrt(nrm)
 
     # compute center MPS tensor
     Ac = ncon((Al, C), ([-1, -2, 1], [1, -3]))
@@ -327,7 +327,7 @@ def entanglementSpectrum(Al, Ar, L, R, truncate=0):
     # construct and normalise center matrix
     C = np.diag(S)
     nrm = np.trace(C @ np.conj(C).T)
-    C /= np.sqrt(nrm);
+    C /= np.sqrt(nrm)
 
     # compute center MPS tensor
     Ac = ncon((Al, C), ([-1, -2, 1], [1, -3]))
