@@ -624,9 +624,9 @@ def minAcC(AcPrime, cPrime):
     C = C / np.sqrt(nrm)
     return Al, Ar, Ac, C
 
-def delta(n, d):
-    out = np.zeros( (n,) * d )
-    out[ tuple([np.arange(n)] * d) ] = 1
+def delta(d, n):
+    out = np.zeros( (d,) * n )
+    out[ tuple([np.arange(d)] * n) ] = 1
     return out
 
 def O(beta, J):
