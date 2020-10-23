@@ -125,32 +125,26 @@ if True:
     
 
 if False:
-    Ts = np.linspace(0.2,3,20)
-    magnetizations = []
-    #beta = 0.440686793509772 #critical point
+    beta = 0.440686793509772 #critical point
     J=1
-    for T in Ts:
-        beta = 1/T
-        O = isingO(beta, 1)
-        delta = 1e-4
-        tol = 1e-3
-        flag = 1
+    O = isingO(beta, 1)
+    delta = 1e-4
+    tol = 1e-3
+    flag = 1
         
-        while flag:
-            lam, Fl = leftFixedPointMPO(Al, O, delta)
-            _ , Fr = rightFixedPointMPO(Ar, O, delta)
-            Fl /= overlapFixedPointsMPO(Fl, Fr, C)
-            lam = np.real(lam)[0]
-            AcPrime, cPrime = calcNewCenterMPO(Ac, C, Fl, Fr, O, lam, delta)
-            AlPrime, ArPrime, AcPrime, cPrime = minAcC(AcPrime, cPrime)
-            delta = np.linalg.norm(OAc(Ac, Fl, Fr, O, lam) - ncon((Al, OC(C, Fl, Fr)), ([-1, -2, 1], [1, -3])))
-            Al, Ar, Ac, C = AlPrime, ArPrime, AcPrime, cPrime
-            print(delta)
-            if delta < tol:
-                flag = 0
-        magnetizations.append(isingMagnetization(beta, J, Ac, Fl, Fr) / isingZ(beta, J, Ac, Fl, Fr))
+    while flag:
+        lam, Fl = leftFixedPointMPO(Al, O, delta)
+        _ , Fr = rightFixedPointMPO(Ar, O, delta)
+        Fl /= overlapFixedPointsMPO(Fl, Fr, C)
+        lam = np.real(lam)[0]
+        AcPrime, cPrime = calcNewCenterMPO(Ac, C, Fl, Fr, O, lam, delta)
+        AlPrime, ArPrime, AcPrime, cPrime = minAcC(AcPrime, cPrime)
+        delta = np.linalg.norm(OAc(Ac, Fl, Fr, O, lam) - ncon((Al, OC(C, Fl, Fr)), ([-1, -2, 1], [1, -3])))
+        Al, Ar, Ac, C = AlPrime, ArPrime, AcPrime, cPrime
+        print(delta)
+        if delta < tol:
+            flag = 0
+ 
     
-    plt.xlabel('T')
-    plt.ylabel('<M>')
-    plt.plot([T for T in Ts], magnetizations)
+
             
