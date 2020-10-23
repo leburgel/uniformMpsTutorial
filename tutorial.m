@@ -291,9 +291,9 @@ plot(svals, 'd');
 
 %% VUMPS for 2d classical Ising model
 
-tol = 1e-6;
+tol = 1e-5;
 
-beta = 0.5; % 2.269
+beta = 0.45; % 2.269
 J = 1;
 
 D = 12;
@@ -323,7 +323,7 @@ while flag
 end
 fprintf('Iterations needed: %i\n', i)
 freeEnergy = -log(lambda)/beta;
-[~, freeEnergyExact, ~] = isingExact(J, beta);
+[~, freeEnergyExact, ~] = isingExact(beta, J);
 % check free energy
 freeEnergy
 freeEnergyExact
@@ -645,7 +645,7 @@ function O = IsingO(beta, J)
     O = ncon({Q_sqrt, Q_sqrt, Q_sqrt, Q_sqrt, delt(4, 2)}, {[-1, 1], [-2, 2], [-3, 3], [-4, 4], [1, 2, 3, 4]});
 end
 
-function [magnetization,free,energy]=isingExact(J,beta)
+function [magnetization,free,energy]=isingExact(beta, J)
     theta=0:1e-6:pi/2;
     x=2*sinh(2*J*beta)/cosh(2*J*beta)^2;
     if 1-(sinh(2*J*beta))^(-4)>0
