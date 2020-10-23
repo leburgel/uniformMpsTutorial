@@ -93,7 +93,7 @@ if True:
     
     print('Bond dimension: D =', D)
     
-    beta = 0.45 # critical point: 0.440686793509772
+    beta = .45 # critical point: 0.440686793509772
 
     A = createMPS(D, d)
     Al, Ar, Ac, C = mixedCanonical(A)
@@ -119,12 +119,12 @@ if True:
     print('Time for VUMPS optimization:', time()-t0, 's')
     print('Iterations needed:', i)
     freeEnergy = freeEnergyDensity(beta, lam)
-    freeEnergyExact = isingExact(beta, 1)[2]
+    freeEnergyExact = isingExact(beta, 1)[1]
     print('Computed free energy:', freeEnergy)
     print('Exact free energy:', freeEnergyExact)
     
 
-if False:
+if True:
     Ts = np.linspace(0.2,3,20)
     magnetizations = []
     #beta = 0.440686793509772 #critical point
