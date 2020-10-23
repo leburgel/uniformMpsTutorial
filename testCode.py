@@ -1,5 +1,4 @@
 from tutorialFunctions import *
-import matplotlib.pyplot as plt
 from time import time
 ### A first test case for the gradient in python
 D = 200
