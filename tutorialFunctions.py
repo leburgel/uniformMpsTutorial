@@ -624,7 +624,7 @@ def minAcC(AcPrime, cPrime):
     C = C / np.sqrt(nrm)
     return Al, Ar, Ac, C
 
-def delta (n, d):
+def delta(n, d):
     out = np.zeros( (n,) * d )
     out[ tuple([np.arange(n)] * d) ] = 1
     return out
@@ -632,7 +632,7 @@ def delta (n, d):
 def O(beta, J):
     c, s = np.sqrt(np.cosh(beta*J)), np.sqrt(np.sinh(beta*J))
     Q_sqrt = 1/np.sqrt(2) * np.array([[c+s, c-s],[c-s, c+s]])
-    O = np.einsum('im, jn, ok, pl, mnop-> ijkl', Q_sqrt, Q_sqrt, Q_sqrt, Q_sqrt, delta(2,4))
+    O = ncon((Q_sqrt, Q_sqrt, Q_sqrt, Q_sqrt, delta(2,4)), ([-1,1], [-2,2], [-3,3], [-4,4], [1,2,3,4]))
     return O
 
 def M(beta, J):
@@ -641,6 +641,14 @@ def M(beta, J):
     Q_sqrt = 1/np.sqrt(2) * np.array([[c+s, c-s],[c-s, c+s]])
     delta_new = np.einsum('im, mjkl-> ijkl', S_z,delta(2,4))
     M = np.einsum('im, jn, ok, pl, mnop-> ijkl', Q_sqrt, Q_sqrt, Q_sqrt, Q_sqrt, delta_new)
+    return M
+
+def M_ncon(beta, J):
+    S_z = np.array([[1,0],[0,-1]])
+    c, s = np.sqrt(np.cosh(beta*J)), np.sqrt(np.sinh(beta*J))
+    Q_sqrt = 1/np.sqrt(2) * np.array([[c+s, c-s],[c-s, c+s]])
+    delta_new = ncon((S_z, delta(2,4)), ([-1,1], [1,-2,-3,-4]))
+    M = ncon((Q_sqrt, Q_sqrt, Q_sqrt, Q_sqrt, delta_new(2,4)), ([-1,1], [-2,2], [-3,3], [-4,4], [1,2,3,4]))
     return M
 
 def free_energy(beta, J):
