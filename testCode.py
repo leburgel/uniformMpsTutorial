@@ -2,7 +2,7 @@ from tutorialFunctions import *
 import matplotlib.pyplot as plt
 from time import time
 ### A first test case for the gradient in python
-D = 100
+D = 200
 d = 3
 J = -1
 
@@ -41,7 +41,7 @@ if False:
 if True:
     # test vumps
     
-    tol = 1e-3
+    tol = 1e-4
     A = normaliseMPS(createMPS(D, d))[0]
     Al, Ar, Ac, C = mixedCanonical(A)
     
@@ -52,7 +52,8 @@ if True:
     assert np.allclose(LHS, RHS) and np.allclose(RHS/np.sqrt(np.einsum('ijk,ijk', RHS, np.conj(RHS))), Ac), "Something went wrong in gauging the MPS"
     
     flag = 1
-    delta = 1e-4
+    delta = 1e-5
+    i = 1
     t0 = time()
     while flag:
         e = np.real(twoSiteMixed(H, Ac, Ar))
@@ -65,12 +66,15 @@ if True:
         delta = np.linalg.norm(H_Ac(Ac, Al, Ar, Rh, Lh, hTilde) - np.einsum('ijk,kl->ijl', Al, H_C(C, Al, Ar, Rh, Lh, hTilde)))
         # print(delta)
         Al = AlPrime; Ar = ArPrime; Ac = AcPrime; C = CPrime;
+        i += 1
         if delta < tol:
             flag = 0
     print('Time for VUMPS optimization:', time()-t0, 's')
+    print('Iterations needed:', i)
     print('Procedure converged at energy ', np.real(twoSiteMixed(H, Ac, Ar)), '\n')
     [_, S, _] = svd(C);
     plt.figure()
     plt.scatter(np.arange(D), S, marker='x')
+    plt.yscale('log')
     plt.show()
 

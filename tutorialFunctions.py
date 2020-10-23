@@ -616,13 +616,21 @@ def minAcC(AcPrime, cPrime):
     UlAc, _ = polar(AcPrime.reshape(D*d,D))
     UlC, _ = polar(cPrime)
     Al = (UlAc @ np.conj(UlC).T).reshape(D, d, D)
-    _, Ar = rightOrthonormal(Al)
-    Ac = AcPrime
-    C = cPrime
+    # # OPTION 1: OLD
+    # _, Ar = rightOrthonormal(Al)
+    # Ac = AcPrime
+    # C = cPrime
+    # nrm = np.trace(C @ np.conj(C).T)
+    # Ac = Ac / np.sqrt(nrm)
+    # C = C / np.sqrt(nrm)
+    # OPTION 2: NEW
+    C, Ar = rightOrthonormal(Al)
     nrm = np.trace(C @ np.conj(C).T)
-    Ac = Ac / np.sqrt(nrm)
     C = C / np.sqrt(nrm)
+    Ac = ncon((Al, C), ([-1, -2, 1], [1, -3]))
     return Al, Ar, Ac, C
+
+
 
 def delta(d, n):
     out = np.zeros( (d,) * n )

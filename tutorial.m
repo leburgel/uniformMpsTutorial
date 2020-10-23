@@ -246,6 +246,8 @@ ArrayIsEqual(e, ExpvTwoSiteUniform(Aopt, l, r, h), tol) % just to be extra sure.
 % gradient descent and fminunc seem to be working now, but sometimes convergence criteria are too strict for fminunc so it just quits at some point
 
 %% Variational optimization of spin-1 Heisenberg Hamiltonian with VUMPS
+D = 12;
+d = 3;
 % tolerance for VUMPS algorithm
 tol = 1e-3;
 % coupling strengths
@@ -258,7 +260,7 @@ A = randcomplex(D, d, D); % initialize random MPS tensor
 flag = true;
 delta = 1e-4;
 tic
-i = 1;
+i = 0;
 while flag
     e = real(ExpvTwoSiteMixed(AC, AL, h)); % current energy density
     e
@@ -284,13 +286,14 @@ svals = diag(C);
 
 plot(svals, 'd');
 
-
 % converging and finding correct energy for antiferromagnet
 % convergence seems a bit slow, why?
 
 %% VUMPS for 2d classical Ising model
 
-beta = .01;
+tol = 1e-6;
+
+beta = 0.5; % 2.269
 J = 1;
 
 D = 12;
@@ -303,10 +306,10 @@ O = IsingO(beta, J);
 [AL, AR, AC, C] = MixedCanonical(A); % go to mixed gauge
 flag = true;
 delta = 1e-4;
-i = 1;
+i = 0;
 while flag
     [lambda, FL] = FixedPointLeft(AL, O, delta);
-    [~, FR] = FixedPointRight(AR, O, delta);
+    [tst, FR] = FixedPointRight(AR, O, delta);
     FL = FL / OverlapFixedPoints(FL, FR, C);
     [ACprime, Cprime] = CalculateNewCenter2D(AC, C, FL, FR, O, lambda, delta);
     [ALprime, ARprime, ACprime, Cprime] = MinAcC(ACprime, Cprime);
@@ -322,6 +325,8 @@ fprintf('Iterations needed: %i\n', i)
 freeEnergy = -log(lambda)/beta;
 [~, freeEnergyExact, ~] = isingExact(J, beta);
 % check free energy
+freeEnergy
+freeEnergyExact
 abs(freeEnergyExact - freeEnergy)/abs(freeEnergy) < 1e-5
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -615,15 +620,13 @@ function [AL, AR, AC, C] = MinAcC(ACprime, Cprime)
     [UlAC, ~] = qrpos(reshape(ACprime, [D*d, D]));
     [UlC, ~] = qrpos(Cprime);
     AL = reshape(UlAC*UlC', [D d D]);
-    % alternative from Bram: compute new AR through rightOrthonormalize on new AL instead of using right polar decomp -> VUMPS always seems to converge using this; doesn't get stuck indefinitely
-    [AR, ~, ~] = RightOrthonormalize(AL);
-    % new AC and C were just given
-    AC = ACprime;
-    C = Cprime;
-    % normalize for mixed gauge (doesn't seem necessary here)
+    % determine AR through right canonization of AL, and extract C and AC from the result
+    % this gives consistent set of MPS tensors in mixed gauge
+    [AR, C, ~] = RightOrthonormalize(AL);
+    % normalize for mixed gauge
     nrm = trace(C*C');
-    AC = AC / sqrt(nrm);
     C = C / sqrt(nrm);
+    AC = ncon({AL, C}, {[-1 -2 1], [1 -3]});
 end
 
 %% VUMPS algorithm for 2-dimensional classical partition function
