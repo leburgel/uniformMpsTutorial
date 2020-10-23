@@ -635,20 +635,12 @@ def O(beta, J):
     O = ncon((Q_sqrt, Q_sqrt, Q_sqrt, Q_sqrt, delta(2,4)), ([-1,1], [-2,2], [-3,3], [-4,4], [1,2,3,4]))
     return O
 
-def M(beta, J):
-    S_z = np.array([[1,0],[0,-1]])
-    c, s = np.sqrt(np.cosh(beta*J)), np.sqrt(np.sinh(beta*J))
-    Q_sqrt = 1/np.sqrt(2) * np.array([[c+s, c-s],[c-s, c+s]])
-    delta_new = np.einsum('im, mjkl-> ijkl', S_z,delta(2,4))
-    M = np.einsum('im, jn, ok, pl, mnop-> ijkl', Q_sqrt, Q_sqrt, Q_sqrt, Q_sqrt, delta_new)
-    return M
-
 def M_ncon(beta, J):
     S_z = np.array([[1,0],[0,-1]])
     c, s = np.sqrt(np.cosh(beta*J)), np.sqrt(np.sinh(beta*J))
     Q_sqrt = 1/np.sqrt(2) * np.array([[c+s, c-s],[c-s, c+s]])
     delta_new = ncon((S_z, delta(2,4)), ([-1,1], [1,-2,-3,-4]))
-    M = ncon((Q_sqrt, Q_sqrt, Q_sqrt, Q_sqrt, delta_new(2,4)), ([-1,1], [-2,2], [-3,3], [-4,4], [1,2,3,4]))
+    M = ncon((Q_sqrt, Q_sqrt, Q_sqrt, Q_sqrt, delta_new), ([-1,1], [-2,2], [-3,3], [-4,4], [1,2,3,4]))
     return M
 
 def free_energy(beta, J):
