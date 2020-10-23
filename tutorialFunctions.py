@@ -640,7 +640,9 @@ def isingO(beta, J):
     O = ncon((Qsqrt, Qsqrt, Qsqrt, Qsqrt, isingVertex(2,4)), ([-1,1], [-2,2], [-3,3], [-4,4], [1,2,3,4]))
     return O
 
+<<<<<<< HEAD
 def partitionLeft(Al, O, delta):
+=======
 
 def isingM(beta, J):
     Z = np.array([[1,0],[0,-1]])
@@ -652,6 +654,7 @@ def isingM(beta, J):
 
 
 def leftFixedPointMPO(Al, O, delta):
+>>>>>>> 5b196baedba0c720efa0ae1aef86551112758660
     D = Al.shape[0]
     d = Al.shape[1]
     transferLeftHandleMPO = lambda v: (ncon((v.reshape((D,d,D)), Al, np.conj(Al), O),([5, 3, 1], [1, 2, -3], [5, 4, -1], [3, 2, -2, 4]))).reshape(-1)
@@ -685,6 +688,7 @@ def OC(X, Fl, Fr):
 def calcNewCenterMPO(Ac, C, Fl, Fr, O, lam, delta):
     D = Fl.shape[0]
     d = Fl.shape[1]
+<<<<<<< HEAD
     handleAc = lambda v: (oAc(v.reshape(D, d, D), Fl, Fr, O, lam)).reshape(-1)
     handleAc = LinearOperator((D ** 2 * d, D ** 2 * d), matvec=handleAc)
     handleC = lambda v: (oC(v.reshape(D, D), Fl, Fr)).reshape(-1)
@@ -728,6 +732,7 @@ if __name__ == '__main__':
 
 
         
+=======
     handleAc = lambda X: (OAc(X.reshape((D,d,D)), Fl, Fr, O, lam)).reshape(-1)
     handleAc = LinearOperator((D**2*d, D**2*d), matvec=handleAc)
     handleC = lambda X: (OC(X.reshape(D, D), Fl, Fr)).reshape(-1)
@@ -760,3 +765,4 @@ def isingExact(beta, J):
     K = np.trapz(1 / np.sqrt(1 - x ** 2 * np.sin(theta) ** 2), theta)
     energy = -J * np.cosh(2 * J * beta) / np.sinh(2 * J * beta) * (1 + 2 / np.pi * (2 * np.tanh(2 * J * beta) ** 2 - 1) * K)
     return magnetization, free, energy
+>>>>>>> 5b196baedba0c720efa0ae1aef86551112758660
