@@ -116,9 +116,6 @@ def leftFixedPoint(A):
 
     D = A.shape[0]
 
-    # set optimal contraction sequence TODO check
-    path = ['einsum_path', (0, 2), (0, 1)]
-
     # calculate transfer matrix handle and cast to LinearOperator
     handleELeft = lambda v: np.reshape(ncon((A, np.conj(A), v.reshape((D, D))), ([1, 2, -2], [3, 2, -1], [3, 1])), D ** 2)
     E = LinearOperator((D ** 2, D ** 2), matvec=handleELeft)

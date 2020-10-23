@@ -69,7 +69,7 @@ if True:
             flag = 0
     print('Time for VUMPS optimization:', time()-t0, 's')
     print('Procedure converged at energy ', np.real(twoSiteMixed(H, Ac, Ar)), '\n')
-    [_, S, _] = svd(C);
+    [_, S, _] = svd(C)
     plt.figure()
     plt.scatter(np.arange(D), S, marker='x')
     plt.show()

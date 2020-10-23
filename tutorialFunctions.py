@@ -481,6 +481,7 @@ def energyDensity(A, H):
 
     return e, g
 
+
 def energyWrapper(H, D, d, varA):
     """
     Wrapper around energyDensity function that takes complex MPS tensor of
@@ -515,6 +516,7 @@ def energyWrapper(H, D, d, varA):
     g = np.concatenate((np.real(g).reshape(-1), np.imag(g).reshape(-1)))
     return e, g
 
+
 #### functions for vumps
 
 def rightEnvMixed(Ar, C, Htilde, delta):
@@ -535,6 +537,7 @@ def rightEnvMixed(Ar, C, Htilde, delta):
     
     return Rh.reshape(D, D)
 
+
 #left environment vumps
 def leftEnvMixed(Al, C, Htilde, delta):
     '''
@@ -550,6 +553,7 @@ def leftEnvMixed(Al, C, Htilde, delta):
     Lh = gmres(transfer_Left, xL.reshape(-1), tol=delta/10)[0]
 
     return Lh.reshape(D, D)
+
 
 def H_Ac(v, Al, Ar, Rh, Lh, Htilde):
     '''
@@ -584,6 +588,7 @@ def H_C(v, Al, Ar, Rh, Lh, Htilde):
 
     return centerTerm + leftEnvTerm + rightEnvTerm
 
+
 def calcNewCenter(Al, Ar, Ac, C, Lh, Rh, Htilde, delta):
     '''
     :param Al:
@@ -605,6 +610,7 @@ def calcNewCenter(Al, Ar, Ac, C, Lh, Rh, Htilde, delta):
     _, cPrime = eigs(handleC, k=1, which="SR", v0=C.reshape(-1), tol=delta/10)
     return AcPrime.reshape((D,d,D)), cPrime.reshape((D,D))
 
+
 def minAcC(AcPrime, cPrime):
     '''
     :param AcPrime:
@@ -624,10 +630,12 @@ def minAcC(AcPrime, cPrime):
     C = C / np.sqrt(nrm)
     return Al, Ar, Ac, C
 
+
 def delta(d, n):
     out = np.zeros( (d,) * n )
     out[ tuple([np.arange(d)] * n) ] = 1
     return out
+
 
 def O(beta, J):
     c, s = np.sqrt(np.cosh(beta*J)), np.sqrt(np.sinh(beta*J))
@@ -638,6 +646,7 @@ def O(beta, J):
     O = ncon((Q_sqrt, Q_sqrt, Q_sqrt, Q_sqrt, delta(2,4)), ([-1,1], [-2,2], [-3,3], [-4,4], [1,2,3,4]))
     return O
 
+
 def M(beta, J):
     S_z = np.array([[1,0],[0,-1]])
     c, s = np.sqrt(np.cosh(beta*J)), np.sqrt(np.sinh(beta*J))
@@ -645,6 +654,7 @@ def M(beta, J):
     delta_new = ncon((S_z, delta(2,4)), ([-1,1], [1,-2,-3,-4]))
     M = ncon((Q_sqrt, Q_sqrt, Q_sqrt, Q_sqrt, delta_new), ([-1,1], [-2,2], [-3,3], [-4,4], [1,2,3,4]))
     return M
+
 
 def free_energy_density(beta, J):
     Lambda=1
