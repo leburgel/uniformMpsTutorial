@@ -1,5 +1,5 @@
 import numpy as np
-from scipy.linalg import rq, qr, svd, polar
+from scipy.linalg import rq, qr, svd, polar, sqrtm
 from scipy.sparse.linalg import eigs, LinearOperator, gmres
 from scipy.optimize import minimize
 from functools import partial
@@ -631,7 +631,10 @@ def delta(d, n):
 
 def O(beta, J):
     c, s = np.sqrt(np.cosh(beta*J)), np.sqrt(np.sinh(beta*J))
-    Q_sqrt = 1/np.sqrt(2) * np.array([[c+s, c-s],[c-s, c+s]])
+    #test
+    #Q = np.array([[np.exp(beta), np.exp(-beta)],[np.exp(-beta), np.exp(beta)]])
+    #Q_sqrt_ = sqrtm(Q)
+    Q_sqrt = 1/2 * np.array([[c+s, c-s],[c-s, c+s]])
     O = ncon((Q_sqrt, Q_sqrt, Q_sqrt, Q_sqrt, delta(2,4)), ([-1,1], [-2,2], [-3,3], [-4,4], [1,2,3,4]))
     return O
 
@@ -643,6 +646,6 @@ def M(beta, J):
     M = ncon((Q_sqrt, Q_sqrt, Q_sqrt, Q_sqrt, delta_new), ([-1,1], [-2,2], [-3,3], [-4,4], [1,2,3,4]))
     return M
 
-def free_energy(beta, J):
+def free_energy_density(beta, J):
     Lambda=1
     return -np.log(Lambda)
