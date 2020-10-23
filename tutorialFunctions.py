@@ -414,7 +414,7 @@ def transferRegularRight(A, l, r, v):
 
     D = A.shape[0]
     v_T = transferRight(A, v)
-    v_rl = np.trace(l @ v.reshape((D,D))) * r
+    v_rl = np.trace(l @ v.reshape((D, D))) * r
     return v - v_T + v_rl.reshape(D**2)
 
 
