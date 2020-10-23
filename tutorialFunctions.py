@@ -4,8 +4,6 @@ from scipy.sparse.linalg import eigs, LinearOperator, gmres
 from scipy.optimize import minimize
 from functools import partial
 from ncon import ncon
-import matplotlib.pyplot as plt
-
 
 def createMPS(bondDimension, physDimension):
     # function to create a random MPS tensor for some bondDimension and physical dimension.
@@ -642,14 +640,6 @@ def O_tensor(beta, J):
     O = ncon((Q_sqrt, Q_sqrt, Q_sqrt, Q_sqrt, kronecker(2,4)), ([-1,1], [-2,2], [-3,3], [-4,4], [1,2,3,4]))
     return O
 
-def M_tensor(beta, J):
-    S_z = np.array([[1,0],[0,-1]])
-    c, s = np.sqrt(np.cosh(beta*J)), np.sqrt(np.sinh(beta*J))
-    Q_sqrt = 1/np.sqrt(2) * np.array([[c+s, c-s],[c-s, c+s]])
-    delta_new = ncon((S_z, kronecker(2,4)), ([-1,1], [1,-2,-3,-4]))
-    M = ncon((Q_sqrt, Q_sqrt, Q_sqrt, Q_sqrt, delta_new), ([-1,1], [-2,2], [-3,3], [-4,4], [1,2,3,4]))
-    return M
-
 def partitionLeft(Al, O, delta):
     D = Al.shape[0]
     d = Al.shape[1]
@@ -689,29 +679,21 @@ def partitionCenter(Ac, C, Fl, Fr, O, lam, delta):
     _, cPrime = eigs(handleC, k=1, which="LM", v0=C.reshape(-1), tol=delta / 10)
     return AcPrime.reshape(D, d, D), cPrime.reshape(D, D)
 
-def Magnetization(beta, J, Ac, Fl, Fr):
-    M_exp = ncon((Fl, Ac, M_tensor(beta, J), np.conj(Ac), Fr), ([1, 3, 2], [2,7,5],[3,7,8,6],[1,6,4], [5,8,4]))
-    return M_exp
 
-def Z(beta, J, Ac, Fl, Fr):
-    TN = ncon((Fl, Ac, O_tensor(beta, J), np.conj(Ac), Fr), ([1, 3, 2], [2,7,5],[3,7,8,6],[1,6,4], [5,8,4]))
-    return TN
-#### vumps to calculate ising partition function
-Ts = np.linspace(0.2,3,20)
-magnetizations = []
-D = 12
-d = 2
-A = createMPS(D,d)
-Al, Ar, Ac, C = mixedCanonical(A)
-#beta = 0.440686793509772 #critical point
-J=1
-for T in Ts:
-    beta = 1/T
+if __name__ == '__main__':
+    
+    #### vumps to calculate ising partition function
+    D = 12
+    d = 2
+    A = createMPS(D,d)
+    Al, Ar, Ac, C = mixedCanonical(A)
+    beta, J = 0.440686793509772, 1 #critical point
+    
     O = O_tensor(beta,1)
     delta = 1e-4
     tol = 1e-3
     flag = 1
-    
+        
     while flag:
         lam, Fl = partitionLeft(Al, O, delta)
         _ , Fr = partitionLeft(Ar, O, delta)
@@ -728,9 +710,7 @@ for T in Ts:
         print(delta)
         if delta < tol:
             flag = 0
-    magnetizations.append(Magnetization(beta, J, Ac, Fl, Fr)/Z(beta, J, Ac, Fl, Fr))
 
-plt.xlabel('T')
-plt.ylabel('<M>')
-plt.plot([T for T in Ts], magnetizations)
+
+
         
