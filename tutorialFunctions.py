@@ -693,8 +693,11 @@ def Magnetization(beta, J, Ac, Fl, Fr):
     M_exp = ncon((Fl, Ac, M_tensor(beta, J), np.conj(Ac), Fr), ([1, 3, 2], [2,7,5],[3,7,8,6],[1,6,4], [5,8,4]))
     return M_exp
 
+def Z(beta, J, Ac, Fl, Fr):
+    TN = ncon((Fl, Ac, O_tensor(beta, J), np.conj(Ac), Fr), ([1, 3, 2], [2,7,5],[3,7,8,6],[1,6,4], [5,8,4]))
+    return TN
 #### vumps to calculate ising partition function
-betas = np.linspace(0,3,50)
+Ts = np.linspace(0.2,3,20)
 magnetizations = []
 D = 12
 d = 2
@@ -702,7 +705,8 @@ A = createMPS(D,d)
 Al, Ar, Ac, C = mixedCanonical(A)
 #beta = 0.440686793509772 #critical point
 J=1
-for beta in betas:
+for T in Ts:
+    beta = 1/T
     O = O_tensor(beta,1)
     delta = 1e-4
     tol = 1e-3
@@ -724,7 +728,9 @@ for beta in betas:
         print(delta)
         if delta < tol:
             flag = 0
-    magnetizations.append(Magnetization(beta, J, Ac, Fl, Fr))
+    magnetizations.append(Magnetization(beta, J, Ac, Fl, Fr)/Z(beta, J, Ac, Fl, Fr))
 
-plt.plot(betas, magnetizations)
+plt.xlabel('T')
+plt.ylabel('<M>')
+plt.plot([T for T in Ts], magnetizations)
         
