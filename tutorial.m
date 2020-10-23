@@ -689,7 +689,7 @@ function [ACprime, Cprime] = CalculateNewCenter2D(AC, C, FL, FR, O, lambda, delt
     % compute action of maps (256) and (257) in the notes and pour this into function handle for eigs
     handleAC = @(X) reshape(OAC(reshape(X, [D d D]), FL, FR, O, lambda), [], 1);
     handleC = @(X) reshape(OC(reshape(X, [D D]), FL, FR), [], 1);
-    % solve eigenvalue problem using 'smallest real' option
+    % solve eigenvalue problem using 'largest magnitude' option
     [ACprime, ~] = eigs(handleAC, D^2*d, 1, 'largestabs', 'Tolerance', delta/10, 'StartVector', reshape(AC, [], 1)); % variable tolerance
     ACprime = reshape(ACprime, [D d D]);
     [Cprime, ~] = eigs(handleC, D^2, 1, 'largestabs', 'Tolerance', delta/10, 'StartVector', reshape(C, [], 1)); % variable tolerance
