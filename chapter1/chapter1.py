@@ -34,7 +34,7 @@ def createMPS(D, d):
 
 def createTransfermatrix(A):
     """
-    Returns a random complex MPS tensor.
+    Form the transfermatrix of an MPS.
 
         Parameters
         ----------
