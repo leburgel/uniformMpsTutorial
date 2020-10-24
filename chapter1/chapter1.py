@@ -50,7 +50,7 @@ def createTransfermatrix(A):
             ordered topLeft-bottomLeft-topRight-bottomRight.
     """
 
-    E = np.einsum('isk,jsl->ijkl', A, np.conj(A)) # TODO swap for ncon
+    E = ncon((A, np.conj(A)), ([-1, 1, -3], [-2, 1, -4]))
 
     return E
 
@@ -116,17 +116,22 @@ def leftFixedPoint(A):
 
     D = A.shape[0]
 
-    # set optimal contraction sequence TODO check
-    path = ['einsum_path', (0, 2), (0, 1)]
-
     # calculate transfer matrix handle and cast to LinearOperator
     handleELeft = lambda v: np.reshape(ncon((A, np.conj(A), v.reshape((D, D))), ([1, 2, -2], [3, 2, -1], [3, 1])), D ** 2)
     E = LinearOperator((D ** 2, D ** 2), matvec=handleELeft)
 
     # calculate fixed point
     _, l = eigs(E, k=1, which='LM')
+    
+    # reshape to matrix
+    l = l.reshape((D, D))
+    
+    # make left fixed point hermitian explicitly
+    l /= np.sqrt((l[0, 0] / np.conj(l).T[0, 0])) # get rid of possible phase
+    l = (l + np.conj(l).T) / 2 # force hermitian
+    l *= np.sign(l[0, 0]) # force positive semidefinite
 
-    return l.reshape(D, D)
+    return l
 
 
 def rightFixedPoint(A):
@@ -153,17 +158,22 @@ def rightFixedPoint(A):
 
     D = A.shape[0]
 
-    # set optimal contraction sequence
-    path = ['einsum_path', (0, 2), (0, 1)]
-
     # calculate transfer matrix handle and cast to LinearOperator
-    handleEright = lambda v: np.reshape(ncon((A, np.conj(A), v.reshape((D,D))), ([-1, 2, 1], [-2, 2, 3], [1, 3])), D ** 2)
-    E = LinearOperator((D ** 2, D ** 2), matvec=handleEright)
+    handleERight = lambda v: np.reshape(ncon((A, np.conj(A), v.reshape((D,D))), ([-1, 2, 1], [-2, 2, 3], [1, 3])), D ** 2)
+    E = LinearOperator((D ** 2, D ** 2), matvec=handleERight)
 
     # calculate fixed point
     _, r = eigs(E, k=1, which='LM')
-
-    return r.reshape(D, D)
+    
+    # reshape to matrix
+    r = r.reshape((D, D))
+    
+    # make right fixed point hermitian explicitly
+    r /= np.sqrt((r[0, 0] / np.conj(r).T[0, 0])) # get rid of possible phase
+    r = (r + np.conj(r).T) / 2 # force hermitian
+    r *= np.sign(r[0, 0]) # force positive semidefinite
+    
+    return r
 
 
 def fixedPoints(A):
@@ -197,7 +207,7 @@ def fixedPoints(A):
     # calculate trace
     trace = np.trace(l@r)
 
-    return l / np.sqrt(trace), r / np.sqrt(trace)
+    return l / trace, r
 
 
 def rqPos(A):
@@ -280,17 +290,17 @@ def rightOrthonormalise(A, R0=None, tol=1e-14, maxIter=1e5):
     R0 = R0 / np.linalg.norm(R0)
 
     # Initialise loop
-    R, Ar = rqPos(np.resize(ncon((A, R0), ([-1, -2, 1], [1, -3])), (D, D * d)))
+    R, Ar = rqPos(np.reshape(ncon((A, R0), ([-1, -2, 1], [1, -3])), (D, D * d)))
     R = R / np.linalg.norm(R)
     convergence = np.linalg.norm(R - R0)
 
     # Decompose A*R until R converges
     while convergence > tol:
         # calculate AR and decompose
-        Rnew, Ar = rqPos(np.resize(ncon((A, R), ([-1, -2, 1], [1, -3])), (D, D * d)))
+        Rnew, Ar = rqPos(np.reshape(ncon((A, R), ([-1, -2, 1], [1, -3])), (D, D * d)))
 
         # normalise new R
-        Rnew = Rnew / np.linalg.norm(Rnew)  # only necessary when working with unnormalised MPS ?
+        Rnew = Rnew / np.linalg.norm(Rnew)
 
         # calculate convergence criterium
         convergence = np.linalg.norm(Rnew - R)
@@ -302,7 +312,7 @@ def rightOrthonormalise(A, R0=None, tol=1e-14, maxIter=1e5):
             break
         i += 1
 
-    return R, np.resize(Ar, (D, d, D))
+    return R, Ar.reshape((D, d, D))
 
 
 def qrPos(A):
@@ -385,17 +395,17 @@ def leftOrthonormalise(A, L0=None, tol=1e-14, maxIter=1e5):
     L0 = L0 / np.linalg.norm(L0)
 
     # Initialise loop
-    Al, L = qrPos(np.resize(ncon((L0, A), ([-1, 1], [1, -2, -3])), (D * d, D)))
+    Al, L = qrPos(np.reshape(ncon((L0, A), ([-1, 1], [1, -2, -3])), (D * d, D)))
     L = L / np.linalg.norm(L)
     convergence = np.linalg.norm(L - L0)
 
     # Decompose L*A until L converges
     while convergence > tol:
         # calculate LA and decompose
-        Al, Lnew = qrPos(np.resize(ncon((L, A), ([-1, 1], [1, -2, -3])), (D * d, D)))
+        Al, Lnew = qrPos(np.reshape(ncon((L, A), ([-1, 1], [1, -2, -3])), (D * d, D)))
 
         # normalise new L
-        Lnew = Lnew / np.linalg.norm(Lnew)  # only necessary when working with unnormalised MPS?
+        Lnew = Lnew / np.linalg.norm(Lnew)
 
         # calculate convergence criterium
         convergence = np.linalg.norm(Lnew - L)
@@ -407,7 +417,7 @@ def leftOrthonormalise(A, L0=None, tol=1e-14, maxIter=1e5):
             break
         i += 1
 
-    return L, np.resize(Al, (D, d, D))
+    return L, Al.reshape((D, d, D))
 
 
 def mixedCanonical(A, L0=None, R0=None, tol=1e-14, maxIter=1e5):
@@ -491,6 +501,10 @@ def entanglementSpectrum(A):
 
         Returns
         -------
+        S : np.array (D,)
+            Singular values of center matrix,
+            representing the entanglement spectrum
+        entropy : float
         entropy : float
             Entanglement entropy across a leg.
     """
@@ -500,9 +514,9 @@ def entanglementSpectrum(A):
 
     # calculate entropy
     S = np.diag(C)
-    entropy = -np.sum(S ** 2 * np.log(S))
+    entropy = -np.sum(S ** 2 * np.log(S ** 2))
 
-    return entropy
+    return S, entropy
 
 
 def truncateMPS(A, Dtrunc):

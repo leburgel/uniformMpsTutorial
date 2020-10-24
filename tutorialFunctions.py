@@ -4,6 +4,7 @@ from scipy.sparse.linalg import eigs, LinearOperator, gmres
 from scipy.optimize import minimize
 from functools import partial
 from ncon import ncon
+import matplotlib.pyplot as plt
 
 
 def createMPS(bondDimension, physDimension):
@@ -516,8 +517,7 @@ def energyWrapper(H, D, d, varA):
     g = np.concatenate((np.real(g).reshape(-1), np.imag(g).reshape(-1)))
     return e, g
 
-
-#### functions for vumps
+#### functions for Hamiltonian vumps
 
 def rightEnvMixed(Ar, C, Htilde, delta):
     '''
@@ -538,7 +538,6 @@ def rightEnvMixed(Ar, C, Htilde, delta):
     return Rh.reshape(D, D)
 
 
-#left environment vumps
 def leftEnvMixed(Al, C, Htilde, delta):
     '''
     :param Al:
@@ -571,6 +570,7 @@ def H_Ac(v, Al, Ar, Rh, Lh, Htilde):
     rightEnvTerm = ncon((v, Rh), ([-1, -2, 1], [1, -3]))
     
     return centerTerm1 + centerTerm2 + leftEnvTerm + rightEnvTerm
+
 
 def H_C(v, Al, Ar, Rh, Lh, Htilde):
     '''
@@ -622,40 +622,99 @@ def minAcC(AcPrime, cPrime):
     UlAc, _ = polar(AcPrime.reshape(D*d,D))
     UlC, _ = polar(cPrime)
     Al = (UlAc @ np.conj(UlC).T).reshape(D, d, D)
-    _, Ar = rightOrthonormal(Al)
-    Ac = AcPrime
-    C = cPrime
+    C, Ar = rightOrthonormal(Al)
     nrm = np.trace(C @ np.conj(C).T)
-    Ac = Ac / np.sqrt(nrm)
     C = C / np.sqrt(nrm)
+    Ac = ncon((Al, C), ([-1, -2, 1], [1, -3]))
     return Al, Ar, Ac, C
 
+#### functions for mpo vumps + 2d partition functions
 
-def delta(d, n):
+def isingVertex(d, n):
     out = np.zeros( (d,) * n )
-    out[ tuple([np.arange(d)] * n) ] = 1
+    out[tuple([np.arange(d)] * n)] = 1
     return out
 
 
-def O(beta, J):
+def isingO(beta, J):
     c, s = np.sqrt(np.cosh(beta*J)), np.sqrt(np.sinh(beta*J))
-    #test
-    #Q = np.array([[np.exp(beta), np.exp(-beta)],[np.exp(-beta), np.exp(beta)]])
-    #Q_sqrt_ = sqrtm(Q)
-    Q_sqrt = 1/2 * np.array([[c+s, c-s],[c-s, c+s]])
-    O = ncon((Q_sqrt, Q_sqrt, Q_sqrt, Q_sqrt, delta(2,4)), ([-1,1], [-2,2], [-3,3], [-4,4], [1,2,3,4]))
+    Qsqrt = 1/np.sqrt(2) * np.array([[c+s, c-s],[c-s, c+s]])
+    O = ncon((Qsqrt, Qsqrt, Qsqrt, Qsqrt, isingVertex(2,4)), ([-1,1], [-2,2], [-3,3], [-4,4], [1,2,3,4]))
     return O
 
 
-def M(beta, J):
-    S_z = np.array([[1,0],[0,-1]])
+def isingM(beta, J):
+    Z = np.array([[1,0],[0,-1]])
     c, s = np.sqrt(np.cosh(beta*J)), np.sqrt(np.sinh(beta*J))
-    Q_sqrt = 1/np.sqrt(2) * np.array([[c+s, c-s],[c-s, c+s]])
-    delta_new = ncon((S_z, delta(2,4)), ([-1,1], [1,-2,-3,-4]))
-    M = ncon((Q_sqrt, Q_sqrt, Q_sqrt, Q_sqrt, delta_new), ([-1,1], [-2,2], [-3,3], [-4,4], [1,2,3,4]))
+    Qsqrt = 1/np.sqrt(2) * np.array([[c+s, c-s],[c-s, c+s]])
+    vertexNew = ncon((Z, isingVertex(2,4)), ([-1,1], [1,-2,-3,-4]))
+    M = ncon((Qsqrt, Qsqrt, Qsqrt, Qsqrt, vertexNew), ([-1,1], [-2,2], [-3,3], [-4,4], [1,2,3,4]))
     return M
 
 
-def free_energy_density(beta, J):
-    Lambda=1
-    return -np.log(Lambda)
+def leftFixedPointMPO(Al, O, delta):
+    D = Al.shape[0]
+    d = Al.shape[1]
+    transferLeftHandleMPO = lambda v: (ncon((v.reshape((D,d,D)), Al, np.conj(Al), O),([5, 3, 1], [1, 2, -3], [5, 4, -1], [3, 2, -2, 4]))).reshape(-1)
+    transferLeftMPO = LinearOperator((D**2*d, D**2*d), matvec=transferLeftHandleMPO)
+    lam, Fl = eigs(transferLeftMPO, k=1, which="LM", tol=delta/10)
+    return lam, Fl.reshape((D,d,D))
+
+
+def rightFixedPointMPO(Ar, O, delta):
+    D = Ar.shape[0]
+    d = Ar.shape[1]
+    transferRightHandleMPO = lambda v: (ncon((v.reshape(D, d, D), Ar, np.conj(Ar), O), ([1, 3, 5], [-1, 2, 1], [-3, 4, 5], [-2, 2, 3, 4]))).reshape(-1)
+    transferRightMPO = LinearOperator((D**2*d, D**2*d), matvec=transferRightHandleMPO)
+    lam, Fr = eigs(transferRightMPO, k=1, which="LM", tol=delta/10)
+    return lam, Fr.reshape((D,d,D))
+
+
+def overlapFixedPointsMPO(Fl, Fr, C):
+    overlap = ncon((Fl, Fr, C, np.conj(C)), ([1, 3, 2], [5, 3, 4], [2, 5], [1, 4]))
+    return overlap
+
+
+def OAc(X, Fl, Fr, O, lam):
+    return ncon((Fl, Fr, X, O),([-1, 2, 1], [4, 5, -3], [1, 3, 4], [2, 3, 5, -2]))/lam
+
+
+def OC(X, Fl, Fr):
+    return ncon((Fl, Fr, X), ([-1, 3, 1], [2, 3, -2], [1, 2]))
+
+
+def calcNewCenterMPO(Ac, C, Fl, Fr, O, lam, delta):
+    D = Fl.shape[0]
+    d = Fl.shape[1]
+    handleAc = lambda X: (OAc(X.reshape((D,d,D)), Fl, Fr, O, lam)).reshape(-1)
+    handleAc = LinearOperator((D**2*d, D**2*d), matvec=handleAc)
+    handleC = lambda X: (OC(X.reshape(D, D), Fl, Fr)).reshape(-1)
+    handleC = LinearOperator((D**2, D**2), matvec=handleC)
+    _, AcPrime = eigs(handleAc, k=1, which="LM", v0=Ac.reshape(-1), tol=delta/10)
+    _, cPrime = eigs(handleC, k=1, which="LM", v0=C.reshape(-1), tol=delta/10)
+    return AcPrime.reshape((D,d,D)), cPrime.reshape((D,D))
+
+
+def freeEnergyDensity(beta, lam):
+    return -np.log(lam) / beta
+
+
+def isingMagnetization(beta, J, Ac, Fl, Fr):
+    return ncon((Fl, Ac, isingM(beta, J), np.conj(Ac), Fr), ([1, 3, 2], [2,7,5],[3,7,8,6],[1,6,4], [5,8,4]))
+
+
+def isingZ(beta, J, Ac, Fl, Fr):
+    return ncon((Fl, Ac, isingO(beta, J), np.conj(Ac), Fr), ([1, 3, 2], [2,7,5],[3,7,8,6],[1,6,4], [5,8,4]))
+
+
+def isingExact(beta, J):
+    theta = np.arange(0, np.pi/2, 1e-6)
+    x = 2 * np.sinh(2 * J * beta) / np.cosh(2 * J * beta) ** 2
+    if 1 - (np.sinh(2 * J * beta)) ** (-4) > 0:
+        magnetization = (1 - (np.sinh(2 * J * beta)) ** (-4)) ** (1 / 8)
+    else:
+        magnetization = 0
+    free = -1 / beta * (np.log(2 * np.cosh(2 * J * beta)) + 1 / np.pi * np.trapz(np.log(1 / 2 * (1 + np.sqrt(1 - x ** 2 * np.sin(theta) ** 2))), theta))
+    K = np.trapz(1 / np.sqrt(1 - x ** 2 * np.sin(theta) ** 2), theta)
+    energy = -J * np.cosh(2 * J * beta) / np.sinh(2 * J * beta) * (1 + 2 / np.pi * (2 * np.tanh(2 * J * beta) ** 2 - 1) * K)
+    return magnetization, free, energy
