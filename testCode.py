@@ -39,7 +39,7 @@ if False:
 
 if True:
     # test Hamiltonian vumps
-    D = 12
+    D = 50
     d = 3
     J = -1
     H = Heisenberg(J, J, J, 0)

@@ -565,10 +565,10 @@ def truncateMPS(A, Dtrunc):
     CTilde = np.diag(S)
 
     # renormalise
-    norm = np.trace(C @ np.conj(C).T)
-    C /= np.sqrt(norm)
+    norm = np.trace(CTilde @ np.conj(CTilde).T)
+    CTilde /= np.sqrt(norm)
 
-    AcTilde = ncon((Al, C), ([-1, -2, 1], [1, -3]))
+    AcTilde = ncon((AlTilde, CTilde), ([-1, -2, 1], [1, -3]))
 
     return AlTilde, AcTilde, ArTilde, CTilde
 
