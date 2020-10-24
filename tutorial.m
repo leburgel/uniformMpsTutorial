@@ -45,6 +45,11 @@ tr = ncon({l, r},{[1 2], [2 1]});
 l = l / sqrt(tr); r = r / sqrt(tr);
 
 % TODO: explicitly make left and right points hermititian!
+ldag = l';  l = l / sqrt(l(1) / ldag(1));
+rdag = r';  r = r / sqrt(r(1) / rdag(1));
+l = (l + l') / 2;
+r = (r + r') / 2;
+
 
 % checks to see if this is right: ok
 checkr = ArrayIsEqual(r, ncon({E, r}, {[-1 -2 1 2], [1 2]}), tol);
@@ -62,7 +67,7 @@ R1 = V * sqrt(S) * V';
 
 AL1 = ncon({L1, A, inv(L1)}, {[-1 1], [1 -2 2], [2 -3]}); % MPS tensor in left canonical form
 AR1 = ncon({inv(R1), A, R1}, {[-1 1], [1 -2 2], [2 -3]}); % MPS tensor in right canonical form
-checkL1 = ArrayIsEqual(eye(D), ncon({AL1, conj(AL1)}, {[1 2 -1], [1 2 -2]}), 1e-9); % check AL: ok, but requires pretty high tolerance
+checkL1 = ArrayIsEqual(eye(D), ncon({AL1, conj(AL1)}, {[1 2 -2], [1 2 -1]}), 1e-9); % check AL: ok, but requires pretty high tolerance
 checkR1 = ArrayIsEqual(eye(D), ncon({AR1, conj(AR1)}, {[-1 1 2], [-2 1 2]}), 1e-9); % check AR: ok, but requires pretty high tolerance
 
 
