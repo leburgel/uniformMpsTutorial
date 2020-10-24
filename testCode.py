@@ -37,7 +37,7 @@ if False:
     # pr.print_stats()
     
 
-if False:
+if True:
     # test Hamiltonian vumps
     D = 12
     d = 3
@@ -85,7 +85,7 @@ if False:
     plt.show()
 
 
-if True:
+if False:
     # test vumps for 2d ising partition function
     D = 12
     d = 2
