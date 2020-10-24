@@ -415,7 +415,7 @@ def transferRegularRight(A, l, r, v):
 
     D = A.shape[0]
     v_T = transferRight(A, v)
-    v_rl = np.trace(l @ v.reshape((D,D))) * r
+    v_rl = np.trace(l @ v.reshape((D, D))) * r
     return v - v_T + v_rl.reshape(D**2)
 
 
@@ -530,8 +530,6 @@ def rightEnvMixed(Ar, C, Htilde, delta):
     D = Ar.shape[0]
     
     xR =  ncon((Ar, Ar, np.conj(Ar), np.conj(Ar), Htilde), ([-1, 2, 1], [1, 3, 4], [-2, 7, 6], [6, 5, 4], [2, 3, 7, 5]))
-    # !!!!!!!!!!!!!!!!!!!!MADE A MISTAKE HERE BEFORE BUT PROCEDURE STILL CONVERGED!!!!!!!!!!!!!!!!
-    # transfer_Right = LinearOperator((D**2, D**2), matvec=partial(transferRegularRight, Ar, C @ np.conj(C).T, np.eye(D)))
     transfer_Right = LinearOperator((D**2, D**2), matvec=partial(transferRegularRight, Ar, np.conj(C).T @ C, np.eye(D)))
     Rh = gmres(transfer_Right, xR.reshape(-1), tol=delta/10)[0]
     

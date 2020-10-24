@@ -29,7 +29,7 @@ if False:
     #pr.enable()
     EnergyHandle = partial(energyWrapper, H, D, d)
     t0 = time()
-    res = minimize(EnergyHandle, varA, jac=True,tol=1e-4)
+    res = minimize(EnergyHandle, varA, jac=True, tol=1e-4)
     print('Time for gradient descent optimization:', time()-t0, 's')
     Aopt = res.x
     print('Procedure converged at energy', res.fun, '\n')
@@ -37,9 +37,9 @@ if False:
     # pr.print_stats()
     
 
-if False:
+if True:
     # test Hamiltonian vumps
-    D = 12
+    D = 50
     d = 3
     J = -1
     H = Heisenberg(J, J, J, 0)
@@ -78,14 +78,14 @@ if False:
     print('Time for VUMPS optimization:', time()-t0, 's')
     print('Iterations needed:', i)
     print('Procedure converged at energy ', np.real(twoSiteMixed(H, Ac, Ar)), '\n')
-    [_, S, _] = svd(C);
+    [_, S, _] = svd(C)
     plt.figure()
     plt.scatter(np.arange(D), S, marker='x')
     plt.yscale('log')
     plt.show()
 
 
-if True:
+if False:
     # test vumps for 2d ising partition function
     D = 12
     d = 2
