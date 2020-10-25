@@ -10,16 +10,9 @@
 %% 2. Finding ground states of local Hamiltonians
 
 % Unlike the notebooks, where function definitions and corresponding checks
-% are constructed in sequence, here all checks and demonstrations are
-% placed at the start of the script, while all function definitions must
-% be given at the bottom of the script
-
-
-%%
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% DEMONSTRATIONS
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% are constructed in sequence, here all checks are placed at the start of
+% the script, while all function definitions must be given at the bottom of
+% the script
 
 
 %% 2.2 Gradient descent algorithms
@@ -34,7 +27,7 @@ Jx = -1; Jy = -1; Jz = -1; hz = 0; % Heisenberg antiferromagnet
 h = Heisenberg(Jx, Jy, Jz, hz);
 
 % initialize bond dimension, physical dimension
-D = 12;
+D = 6;
 d = 3;
 
 % initialize random MPS
@@ -43,59 +36,206 @@ A = normaliseMPS(A);
 
 
 % Minimization of the energy through naive gradient descent
-tol = 1e-4; % tolerance for norm of gradient
-fprintf('\n\nGradient descent optimization:\n\n')
+tol = 1e-3;
+disp('Gradient descent optimization:\n')
 tic;
-[E1, A1] = groundStateGradDescent(h, D, 0.1, A, tol, 5e2);
+[E1, A1] = groundStateGradDescent(h, D, 0.1, A, tol, 1e4);
 t1 = toc;
-fprintf('\nTime until convergence: %fs\n', t1)
-fprintf('Computed energy: %.14f\n\n', E1)
+fprintf('Time until convergence: %ds', t1)
+fprintf('Computed energy: %d\n', E1)
 
-
-% Minimization of the energy using the fminunc minimizer:
-tol = 1e-6; % tolerance for fminunc
-fprintf('\n\nOptimization using fminunc:\n\n')
+% Minimization of the energy using naive gradient descent:
+tol = 1e-5;
+disp('Optimization using fminunc:\n')
 tic
 [E2, A2] = groundStateMinimise(h, D, A, tol);
 t2 = toc;
-fprintf('\nTime until convergence: %fs\n', t2)
-fprintf('Computed energy: %.14f\n', E2)
+fprintf('Time until convergence: %ds', t2, 's')
+fprintf('Computed energy: %d\n', E2)
 
 
-%% 2.3 VUMPS
+% % most naive approach: converges to same energy as fminunc
+% A = randcomplex(D, d, D);
+% tl = 1e-4;
+% epsilon = 0.1;
+% flag = true;
+% while flag
+%     [e, g] = EnergyDensity(A, h);
+%     e
+%     Aprime = A - epsilon * g;
+%     if ArrayIsEqual(A, Aprime, tl)
+%         flag = false;
+%     else
+%         A = Aprime;
+%     end
+% end
 
-% Variational optimization of spin-1 Heisenberg Hamiltonian with VUMPS
+% running now, converges to the same energy every time
+ReA = rand(D, d, D);
+ImA = rand(D, d, D);
+varA = [reshape(ReA, [], 1); reshape(ImA, [], 1)];
+EnergyHandle = @(varA) EnergyWrapper(varA, h, D, d);
+options = optimoptions('fminunc', 'SpecifyObjectiveGradient', true);
+tic
+[Aopt, e] = fminunc(EnergyHandle, varA, options);
+toc
+Aopt = complex(reshape(Aopt(1:D^2*d), [D d D]), reshape(Aopt(D^2*d+1:end), [D d D]));
+[Aopt, l, r] = NormalizeMPS(Aopt);
+ArrayIsEqual(e, ExpvTwoSiteUniform(Aopt, l, r, h), tol) % just to be extra sure...
 
-% coupling strengths
-Jx = -1; Jy = -1; Jz = -1; hz = 0; % Heisenberg antiferromagnet
-% Heisenberg Hamiltonian
-h = Heisenberg(Jx, Jy, Jz, hz);
+% gradient descent and fminunc seem to be working now, but sometimes convergence criteria are too strict for fminunc so it just quits at some point
 
-% initialize bond dimension, physical dimension
+
+%% Variational optimization of spin-1 Heisenberg Hamiltonian with VUMPS
 D = 12;
 d = 3;
+% tolerance for VUMPS algorithm
+tol = 1e-3;
+% coupling strengths
+Jx = -1; Jy = -1; Jz = -1; hz = 0;
+% Heisenberg Hamiltonian
+h = HeisenbergHamiltonian(Jx, Jy, Jz, hz); % Heisenberg antiferromagnet
 
-% initialize random MPS
+A = randcomplex(D, d, D); % initialize random MPS tensor
+[AL, AR, AC, C] = MixedCanonical(A); % go to mixed gauge
+flag = true;
+delta = 1e-4;
+tic
+i = 0;
+while flag
+    e = real(ExpvTwoSiteMixed(AC, AL, h)); % current energy density
+    fprintf('Current energy: %d\n', e)
+    htilde = h - e * ncon({eye(d), eye(d)}, {[-1 -3], [-2 -4]}); % regularized energy density
+    Rh = RightEnvMixed(AR, C, htilde, delta);
+    Lh = LeftEnvMixed(AL, C, htilde, delta);
+    [ACprime, Cprime] = CalculateNewCenter(AL, AR, AC, C, Rh, Lh, htilde, delta);
+    [ALprime, ARprime, ACprime, Cprime] = MinAcC(ACprime, Cprime);
+    delta = ArrayNorm(H_AC(AC, AL, AR, Rh, Lh, htilde) - ncon({AL, H_C(C, AL, AR, Rh, Lh, htilde)}, {[-1 -2 1], [1 -3]})); % calculate error using new or old AL, AR, Rh, Lh? now using old...
+    fprintf('Current error: %d\n', delta)
+    AL = ALprime; AR = ARprime; AC = ACprime; C = Cprime; % update
+    i = i+1;
+    if delta < tol
+        flag = false;
+    end
+end
+toc
+fprintf('Iterations needed: %i\n', i)
+
+[U, C, V] = svd(C);
+
+svals = diag(C);
+
+plot(svals, 'd');
+
+% converging and finding correct energy for antiferromagnet
+% convergence seems a bit slow, why?
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% CHECKS
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+%% 1.1 Normalisation
+
+d = 3;
+D = 5;
+
+% initializing a random MPS:
+A = createMPS(D, d);
+
+assert(isequal(size(A), [D, d, D]), 'Generated MPS tensor has incorrect shape.')
+assert(~isreal(a), 'MPS tensor should have complex values')
+
+
+% normalising an MPS through naive diagonalization of the transfer matrix:
+A = normaliseMPSNaive(A);
+[l, r] = fixedPointsNaive(A);
+
+assert(ArrayIsEqual(l, l', 1e-12), 'left fixed point should be hermitian!')
+assert(ArrayIsEqual(r, r', 1e-12), 'left fixed point should be hermitian!')
+
+assert(ArrayIsEqual(l, ncon({A, l, conj(A)}, {[1, 2, -2], [3, 1], [3, 2, -1]}), 1e-12), 'l should be a left fixed point!')
+assert(ArrayIsEqual(r, ncon({A, r, conj(A)}, {[-1, 2, 1], [1, 3], [-2, 2, 3]}), 1e-12), 'r should be a right fixed point!')
+assert(abs(trace(l*r) - 1) < 1e-12, 'Left and right fixed points should be trace normalised!')
+
+
+%% 1.2 Gauge fixing
+
+% left and right orthonormalisation through taking square root of fixed points
+
+[L, Al] = leftOrthonormaliseNaive(A, l);
+[R, Ar] = rightOrthonormaliseNaive(A, r);
+
+assert(ArrayIsEqual(R * R', r, 1e-12), 'Right gauge does not square to r')
+assert(ArrayIsEqual(L' * L, l, 1e-12), 'Left gauge does not sqaure to l')
+assert(ArrayIsEqual(eye(D), ncon({Ar, conj(Ar)}, {[-1 1 2], [-2 1 2]}), 1e-9), 'Ar not in right-orthonormal form')
+assert(ArrayIsEqual(eye(D), ncon({Al, conj(Al)}, {[1 2 -2], [1 2 -1]}), 1e-9), 'Al not in left-orthonormal form')
+
+
+% going to mixed gauge
+[Al, Ac, Ar, C] = mixedCanonicalNaive(A);
+
+assert(ArrayIsEqual(eye(D), ncon({Ar, conj(Ar)}, {[-1 1 2], [-2 1 2]}), 1e-9), 'Ar not in right-orthonormal form')
+assert(ArrayIsEqual(eye(D), ncon({Al, conj(Al)}, {[1 2 -2], [1 2 -1]}), 1e-9), 'Al not in left-orthonormal form')
+LHS = ncon({Al, C}, {[-1, -2, 1], [1, -3]});
+RHS = ncon({C, Ar}, {[-1, 1], [1, -2, -3]});
+assert(ArrayIsEqual(LHS, RHS, 1e-12) && ArrayIsEqual(RHS, Ac, 1e-12), 'Something went wrong in gauging the MPS')
+
+
+%% 1.3 Truncation of a uniform MPS
+
+[AlTilde, AcTilde, ArTilde, CTilde] = truncateMPS(A, 3);
+assert(isequal(size(AlTilde), [3, 3, 3]), 'Something went wrong in truncating the MPS')
+
+
+%% 1.4 Algorithms for finding canonical forms
+
+A = createMPS(D, d);
+
+% normalising an MPS through action of transfer matrix on a left and right matrix as a function handle:
+A = normaliseMPS(A);
+[l, r] = fixedPoints(A);
+
+assert(ArrayIsEqual(l, l', 1e-12), 'left fixed point should be hermitian!')
+assert(ArrayIsEqual(r, r', 1e-12), 'left fixed point should be hermitian!')
+
+assert(ArrayIsEqual(l, ncon({A, l, conj(A)}, {[1, 2, -2], [3, 1], [3, 2, -1]}), 1e-12), 'l should be a left fixed point!')
+assert(ArrayIsEqual(r, ncon({A, r, conj(A)}, {[-1, 2, 1], [1, 3], [-2, 2, 3]}), 1e-12), 'r should be a right fixed point!')
+assert(abs(trace(l*r) - 1) < 1e-12, 'Left and right fixed points should be trace normalised!')
+
+
+% gauging an MPS through iterative QR decompositions:
+[Al, Ac, Ar, C] = mixedCanonical(A);
+% [R, Ar] = rightOrthonormalise(A);
+% [L, Al] = leftOrthonormalise(A);
+
+assert(ArrayIsEqual(eye(D), ncon({Ar, conj(Ar)}, {[-1 1 2], [-2 1 2]}), 1e-12), 'Ar not in right-orthonormal form')
+assert(ArrayIsEqual(eye(D), ncon({Al, conj(Al)}, {[1 2 -2], [1 2 -1]}), 1e-12), 'Al not in left-orthonormal form')
+LHS = ncon({Al, C}, {[-1, -2, 1], [1, -3]});
+RHS = ncon({C, Ar}, {[-1, 1], [1, -2, -3]});
+assert(ArrayIsEqual(LHS, RHS, 1e-12) && ArrayIsEqual(RHS, Ac, 1e-12), 'Something went wrong in gauging the MPS')
+
+
+%% 1.5 Computing expectation values
 A = createMPS(D, d);
 A = normaliseMPS(A);
+[l, r] = fixedPoints(A);
+[Al, Ac, Ar, C] = mixedCanonical(A);
 
-% energy optimization using VUMPS
-fprintf('\n\nEnergy optimization using VUMPS:\n')
-tic
-[E, Al, Ac, Ar, C] = vumps(h, D, A, 1e-4);
-t = toc;
-fprintf('\nTime until convergence: %f\n', t)
-fprintf('Computed energy: %.14f\n', E)
+O1 = rand(d,d) + 1i * rand(d,d);
+expVal = expVal1Uniform(O1, A, l, r);
+expValMix = expVal1Mixed(O1, Ac);
+diff = abs(expVal - expValMix);
+assert(diff < 1e-12, 'different gauges give different values?')
 
+O2 =rand(d, d, d, d) + 1i *rand(d, d, d, d);
+expVal = expVal2Uniform(O2, A, l, r);
+expValGauge = expVal2Mixed(O2, Ac, Ar);
+expValGauge2 = expVal2Mixed(O2, Al, Ac);
 
-% Plot entanglement spectrum for resulting ground state
-[~, S, ~] = svd(C); % singular values of center matrix give entanglement spectrum
-figure
-scatter(1:D, diag(S), 'x')
-title('Entanglement spectrum of ground state')
-set(gca, 'YScale', 'log')
-
-%%
+diff1 = abs(expVal - expValGauge);
+diff2 = abs(expVal - expValGauge2);
+assert(diff1 < 1e-12 && diff2 < 1e-12, 'different gauges give different values?')
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % FUNCTION DEFINITIONS
@@ -145,25 +285,25 @@ function [term1, term2] = gradCenterTerms(hTilde, A, l, r)
     % 
     %     Parameters
     %     ----------
-    %     hTilde : array (d, d, d, d)
+    %     hTilde : np.array (d, d, d, d)
     %         reduced Hamiltonian,
     %         ordered topLeft-topRight-bottomLeft-bottomRight.
-    %     A : array (D, d, D)
+    %     A : np.array (D, d, D)
     %         normalised MPS tensor with 3 legs,
     %         ordered left-bottom-right.
-    %     l : array(D, D), optional
+    %     l : np.array(D, D), optional
     %         left fixed point of transfermatrix,
     %         normalised.
-    %     r : array(D, D), optional
+    %     r : np.array(D, D), optional
     %         right fixed point of transfermatrix,
     %         normalised.
     % 
     %     Returns
     %     -------
-    %     term1 : array(D, d, D)
+    %     term1 : np.array(D, d, D)
     %         first term of gradient,
     %         ordered left-mid-right.
-    %     term2 : array(D, d, D)
+    %     term2 : np.array(D, d, D)
     %         second term of gradient,
     %         ordered left-mid-right.
     
@@ -183,23 +323,23 @@ function vNew = EtildeRight(A, l, r, v)
     % 
     %     Parameters
     %     ----------
-    %     A : array (D, d, D)
+    %     A : np.array (D, d, D)
     %         normalised MPS tensor with 3 legs,
     %         ordered left-bottom-right.
-    %     l : array(D, D), optional
+    %     l : np.array(D, D), optional
     %         left fixed point of transfermatrix,
     %         normalised.
-    %     r : array(D, D), optional
+    %     r : np.array(D, D), optional
     %         right fixed point of transfermatrix,
     %         normalised.
-    %     v : array(D**2)
+    %     v : np.array(D**2)
     %         right matrix of size (D, D) on which
     %         (1 - Etilde) acts,
     %         given as a vector of size (D**2,)
     % 
     %     Returns
     %     -------
-    %     vNew : array(D**2)
+    %     vNew : np.array(D**2)
     %         result of action of (1 - Etilde)
     %         on a right matrix,
     %         given as a vector of size (D**2,)
@@ -221,17 +361,17 @@ function Rh = RhUniform(hTilde, A, l, r)
     % 
     %     Parameters
     %     ----------
-    %     hTilde : array (d, d, d, d)
+    %     hTilde : np.array (d, d, d, d)
     %         reduced Hamiltonian,
     %         ordered topLeft-topRight-bottomLeft-bottomRight,
     %         renormalised.
-    %     A : array (D, d, D)
+    %     A : np.array (D, d, D)
     %         normalised MPS tensor with 3 legs,
     %         ordered left-bottom-right.
-    %     l : array(D, D), optional
+    %     l : np.array(D, D), optional
     %         left fixed point of transfermatrix,
     %         normalised.
-    %     r : array(D, D), optional
+    %     r : np.array(D, D), optional
     %         right fixed point of transfermatrix,
     %         normalised.
     % 
@@ -250,8 +390,7 @@ function Rh = RhUniform(hTilde, A, l, r)
     b = ncon({r, A, A, conj(A), conj(A), hTilde}, {[4, 5], [-1, 2, 1], [1, 3, 4], [-2, 8, 7], [7, 6, 5], [2, 3, 8, 6]});
     % solve Ax = b for x, where x is Rh, and reshape result to matrix
     A = @(v) EtildeRight(A, l, r, v);
-    [Rh, ~] = gmres(A, reshape(b, [], 1));
-    Rh = reshape(Rh, [D D]);
+    Rh = reshape(gmres(A, reshape(b, [], 1)), [D D]);
 end
 
 
@@ -260,23 +399,23 @@ function leftTerms = gradLeftTerms(hTilde, A, l, r)
     % 
     %     Parameters
     %     ----------
-    %     hTilde : array (d, d, d, d)
+    %     hTilde : np.array (d, d, d, d)
     %         reduced Hamiltonian,
     %         ordered topLeft-topRight-bottomLeft-bottomRight,
     %         renormalised.
-    %     A : array (D, d, D)
+    %     A : np.array (D, d, D)
     %         MPS tensor with 3 legs,
     %         ordered left-bottom-right.
-    %     l : array(D, D), optional
+    %     l : np.array(D, D), optional
     %         left fixed point of transfermatrix,
     %         normalised.
-    %     r : array(D, D), optional
+    %     r : np.array(D, D), optional
     %         right fixed point of transfermatrix,
     %         normalised.
     % 
     %     Returns
     %     -------
-    %     leftTerms : array(D, d, D)
+    %     leftTerms : np.array(D, d, D)
     %         left terms of gradient,
     %         ordered left-mid-right.
     
@@ -296,23 +435,23 @@ function vNew = EtildeLeft(A, l, r, v)
     % 
     %     Parameters
     %     ----------
-    %     A : array (D, d, D)
+    %     A : np.array (D, d, D)
     %         normalised MPS tensor with 3 legs,
     %         ordered left-bottom-right.
-    %     l : array(D, D), optional
+    %     l : np.array(D, D), optional
     %         left fixed point of transfermatrix,
     %         normalised.
-    %     r : array(D, D), optional
+    %     r : np.array(D, D), optional
     %         right fixed point of transfermatrix,
     %         normalised.
-    %     v : array(D**2)
+    %     v : np.array(D**2)
     %         right matrix of size (D, D) on which
     %         (1 - Etilde) acts,
     %         given as a vector of size (D**2,)
     % 
     %     Returns
     %     -------
-    %     vNew : array(D**2)
+    %     vNew : np.array(D**2)
     %         result of action of (1 - Etilde)
     %         on a left matrix,
     %         given as a vector of size (D**2,)
@@ -334,23 +473,23 @@ function Lh = LhUniform(hTilde, A, l, r)
     % 
     %     Parameters
     %     ----------
-    %     hTilde : array (d, d, d, d)
+    %     hTilde : np.array (d, d, d, d)
     %         reduced Hamiltonian,
     %         ordered topLeft-topRight-bottomLeft-bottomRight,
     %         renormalised.
-    %     A : array (D, d, D)
+    %     A : np.array (D, d, D)
     %         MPS tensor with 3 legs,
     %         ordered left-bottom-right.
-    %     l : array(D, D), optional
+    %     l : np.array(D, D), optional
     %         left fixed point of transfermatrix,
     %         normalised.
-    %     r : array(D, D), optional
+    %     r : np.array(D, D), optional
     %         right fixed point of transfermatrix,
     %         normalised.
     % 
     %     Returns
     %     -------
-    %     Lh : array(D, D)
+    %     Lh : np.array(D, D)
     %         result of contraction,
     %         ordered bottom-top.
 
@@ -363,8 +502,7 @@ function Lh = LhUniform(hTilde, A, l, r)
     b = ncon({l, A, A, conj(A), conj(A), hTilde}, {[5, 1], [1, 3, 2], [2, 4, -2], [5, 6, 7], [7, 8, -1], [3, 4, 6, 8]});
     % solve Ax = b for x, where x is Lh, and reshape result to matrix
     A = @(v) EtildeLeft(A, l, r, v);
-    [Lh, ~] = gmres(A, reshape(b, [], 1));
-    Lh = reshape(Lh, [D D]);
+    Lh = reshape(gmres(A, reshape(b, [], 1)), [D D]);
 end
 
 
@@ -373,17 +511,17 @@ function rightTerms =  gradRightTerms(hTilde, A, l, r)
     % 
     %     Parameters
     %     ----------
-    %     hTilde : array (d, d, d, d)
+    %     hTilde : np.array (d, d, d, d)
     %         reduced Hamiltonian,
     %         ordered topLeft-topRight-bottomLeft-bottomRight,
     %         renormalised.
-    %     A : array (D, d, D)
+    %     A : np.array (D, d, D)
     %         MPS tensor with 3 legs,
     %         ordered left-bottom-right.
-    %     l : array(D, D), optional
+    %     l : np.array(D, D), optional
     %         left fixed point of transfermatrix,
     %         normalised.
-    %     r : array(D, D), optional
+    %     r : np.array(D, D), optional
     %         right fixed point of transfermatrix,
     %         normalised.
     % 
@@ -409,23 +547,23 @@ function grad = gradient(h, A, l, r)
     % 
     %     Parameters
     %     ----------
-    %     h : array (d, d, d, d)
+    %     h : np.array (d, d, d, d)
     %         Hamiltonian,
     %         ordered topLeft-topRight-bottomLeft-bottomRight,
     %         renormalised.
-    %     A : array (D, d, D)
+    %     A : np.array (D, d, D)
     %         MPS tensor with 3 legs,
     %         ordered left-bottom-right.
-    %     l : array(D, D), optional
+    %     l : np.array(D, D), optional
     %         left fixed point of transfermatrix,
     %         normalised.
-    %     r : array(D, D), optional
+    %     r : np.array(D, D), optional
     %         right fixed point of transfermatrix,
     %         normalised.
     % 
     %     Returns
     %     -------
-    %     grad : array(D, d, D)
+    %     grad : np.array(D, d, D)
     %         Gradient,
     %         ordered left-mid-right.
     
@@ -448,14 +586,14 @@ function [E, A] = groundStateGradDescent(h, D, eps, A0, tol, maxIter)
     % 
     %     Parameters
     %     ----------
-    %     h : array (d, d, d, d)
+    %     h : np.array (d, d, d, d)
     %         Hamiltonian to minimise,
     %         ordered topLeft-topRight-bottomLeft-bottomRight.
     %     D : int
     %         Bond dimension
     %     eps : float
     %         Stepsize.
-    %     A0 : array (D, d, D)
+    %     A0 : np.array (D, d, D)
     %         normalised MPS tensor with 3 legs,
     %         ordered left-bottom-right,
     %         initial guess.
@@ -468,13 +606,13 @@ function [E, A] = groundStateGradDescent(h, D, eps, A0, tol, maxIter)
     %     -------
     %     E : float
     %         expectation value @ minimum
-    %     A : array(D, d, D)
+    %     A : np.array(D, d, D)
     %         ground state MPS,
     %         ordered left-mid-right.
 
     d = size(h, 1);
     if nargin < 6
-        maxIter = 1e4;
+        maxIter = 1e5;
     end
     if nargin < 5
         tol = 1e-3;
@@ -491,23 +629,20 @@ function [E, A] = groundStateGradDescent(h, D, eps, A0, tol, maxIter)
         % do a step
         A = A - eps * g;
         A = normaliseMPS(A);
-        [l, r] = fixedPoints(A);
         i = i + 1;
         
-        if ~(mod(i,50))
-            E = real(expVal2Uniform(h, A, l, r));
-            fprintf('Iteration: %i\n', i)
-            fprintf('Current energy: %.14f\n', E)
+        if ~(mod(i,100))
+            E = real(expVal2Uniform(h, A));
+            fprintf('Current energy: %d', E)
         end
         % calculate new gradient
         g = gradient(h, A);
         if i > maxIter
             disp('Warning: gradient descent did not converge!')
-            break
         end
     end
     % calculate ground state energy
-    E = real(expVal2Uniform(h, A, l, r));
+    E = real(expVal2Uniform(h, A));
 end
 
 
@@ -530,8 +665,8 @@ function A = unwrapper(varA, D, d)
     %         ordered left-bottom-right.
         
     % unpack real and imaginary part
-    Areal = varA(1:D^2*d);
-    Aimag = varA(D^2*d+1:end);
+    Areal = varA(1:D^2 * d);
+    Aimag = varA(D^2 * d:end);
     A = reshape(complex(Areal, Aimag), [D d D]);
 end
 
@@ -558,20 +693,20 @@ function varA = wrapper(A)
 end
         
 
-function [e, g] = energyDensity(h, D, d, varA)
-    % Function to optimize via fminunc.
+function [e, g] = energyDensity(varA, D, d)
+    %     Function to optimize via fminunc.
     % 
-    %     Parameters
-    %     ----------
-    %     varA : array(2 * D * d * D)
-    %         MPS tensor in real vector form.
+    %         Parameters
+    %         ----------
+    %         varA : np.array(2 * D * d * D)
+    %             MPS tensor in real vector form.
     % 
-    %     Returns
-    %     -------
-    %     e : float
-    %         energy @varA
-    %     g : array(2 * D * d * D)
-    %         gradient vector @varA
+    %         Returns
+    %         -------
+    %         e : float
+    %             function value @varA
+    %         g : np.array(2 * D * d * D)
+    %             gradient vector @varA
         
     % unwrap varA
     A = unwrapper(varA, D, d);
@@ -621,10 +756,39 @@ function [E, Aopt] = groundStateMinimise(h, D, A0, tol)
     end
     varA0 = wrapper(A0);
     % calculate minimum
-    energyHandle = @(varA) energyDensity(h, D, d, varA);
+    energyHandle = @(varA) energyDensity(varA, D, d);
     options = optimoptions('fminunc', 'SpecifyObjectiveGradient', true, 'Display', 'iter', 'OptimalityTolerance', tol);
     [varAopt, E] = fminunc(energyHandle, varA0, options);
     Aopt = normaliseMPS(unwrapper(varAopt, D, d));
+end
+
+
+function h = Heisenberg(Jx, Jy, Jz, hz)
+    % Construct the spin-1 Heisenberg Hamiltonian for given couplings.
+    % 
+    %     Parameters
+    %     ----------
+    %     Jx : float
+    %         Coupling strength in x direction
+    %     Jy : float
+    %         Coupling strength in y direction
+    %     Jy : float
+    %         Coupling strength in z direction
+    %     hz : float
+    %         Coupling for Sz terms
+    % 
+    %     Returns
+    %     -------
+    %     h : array (3, 3, 3, 3)
+    %         Spin-1 Heisenberg Hamiltonian.
+    
+    % spin-1 angular momentum operators
+    Sx = [0 1 0; 1 0 1; 0 1 0] / sqrt(2);
+    Sy = [0 -1 0; 1 0 -1; 0 1 0] * 1i / sqrt(2);
+    Sz = [1 0 0; 0 0 0; 0 0 -1]; 
+    % Heisenberg Hamiltonian
+    h = -Jx*ncon({Sx, Sx}, {[-1 -3], [-2 -4]}) - Jy*ncon({Sy, Sy}, {[-1 -3], [-2 -4]}) - Jz*ncon({Sz, Sz}, {[-1 -3], [-2 -4]})...
+            - hz*ncon({Sz, eye(3)}, {[-1 -3], [-2 -4]}) - hz*ncon({eye(3), eye(3)}, {[-1 -3], [-2 -4]});
 end
 
 
@@ -695,7 +859,7 @@ function Rh = RhMixed(hTilde, Ar, C, tol)
     l = C' * C; % left fixed point of right transfer matrix
     r = eye(D); % right fixed point of right transfer matrix: right orthonormal
     % construct b
-    b = ncon({Ar, Ar, conj(Ar), conj(Ar), hTilde}, {[-1, 2, 1], [1, 3, 4], [-2, 7, 6], [6, 5, 4], [2, 3, 7, 5]});
+    b = ncon({Ar, Ar, np.conj(Ar), np.conj(Ar), hTilde}, {[-1, 2, 1], [1, 3, 4], [-2, 7, 6], [6, 5, 4], [2, 3, 7, 5]});
     % solve Ax = b for x
     A = @(v) EtildeRight(Ar, l, r, v);
     [Rh, ~] = gmres(A, reshape(b, [], 1), [], tol);
@@ -736,7 +900,7 @@ function Lh = LhMixed(hTilde, Al, C, tol)
     l = eye(D); % left fixed point of right transfer matrix
     r = C * C'; % right fixed point of right transfer matrix: right orthonormal
     % construct b
-    b = ncon({Al, Al, conj(Al), conj(Al), hTilde}, {[4, 2, 1], [1, 3, -2], [4, 5, 6], [6, 7, -1], [2, 3, 5, 7]});
+    b = ncon({Al, Al, np.conj(Al), np.conj(Al), hTilde}, {[4, 2, 1], [1, 3, -2], [4, 5, 6], [6, 7, -1], [2, 3, 5, 7]});
     % solve Ax = b for x
     A = @(v) EtildeLeft(Al, l, r, v);
     [Lh, ~] = gmres(A, reshape(b, [], 1), [], tol);
@@ -777,9 +941,9 @@ function H_AcV = H_Ac(hTilde, Al, Ar, Lh, Rh, v)
     %         representing a tensor of size (D, d, D)
 
     % first term
-    term1 = ncon({Al, v, conj(Al), hTilde}, {[4, 2, 1], [1, 3, -3], [4, 5, -1], [2, 3, 5, -2]});
+    term1 = ncon({Al, v, np.conj(Al), hTilde}, {[4, 2, 1], [1, 3, -3], [4, 5, -1], [2, 3, 5, -2]});
     % second term
-    term2 = ncon({v, Ar, conj(Ar), hTilde}, {[-1, 2, 1], [1, 3, 4], [-3, 5, 4], [2, 3, -2, 5]});
+    term2 = ncon({v, Ar, np.conj(Ar), hTilde}, {[-1, 2, 1], [1, 3, 4], [-3, 5, 4], [2, 3, -2, 5]});
     % third term
     term3 = ncon({Lh, v}, {[-1, 1], [1, -2, -3]});
     % fourth term
@@ -821,7 +985,7 @@ function H_CV = H_C(hTilde, Al, Ar, Lh, Rh, v)
     %         Result of the action of H_C on the matrix v.
 
     % first term
-    term1 = ncon({Al, v, Ar, conj(Al), conj(Ar), hTilde}, {[5, 3, 1], [1, 2], [2, 4, 7], [5, 6, -1], [-2, 8, 7], [3, 4, 6, 8]});
+    term1 = ncon({Al, v, Ar, np.conj(Al), np.conj(Ar), hTilde}, {[5, 3, 1], [1, 2], [2, 4, 7], [5, 6, -1], [-2, 8, 7], [3, 4, 6, 8]});
     % second term
     term2 = Lh * v;
     % third term
@@ -867,11 +1031,11 @@ function [AcTilde, CTilde] = calcNewCenter(hTilde, Al, Ac, Ar, C, Lh, Rh, tol)
     % 
     %     Returns
     %     -------
-    %     AcTilde : array(D, d, D)
+    %     AcTilde : np.array(D, d, D)
     %         MPS tensor zith 3 legs,
     %         ordered left-bottom-right,
     %         center gauge.
-    %     CTilde : array(D, D)
+    %     CTilde : np.array(D, D)
     %         Center gauge with 2 legs,
     %         ordered left-right.
     
@@ -888,12 +1052,12 @@ function [AcTilde, CTilde] = calcNewCenter(hTilde, Al, Ac, Ar, C, Lh, Rh, tol)
     end
     % calculate new AcTilde
     % wrapper around H_Ac that takes and returns a vector
-    handleAc = @(v) reshape(H_Ac(hTilde, Al, Ar, Lh, Rh, reshape(v, [D, d, D])), [], 1);
+    handleAc = @(v) reshape(H_Ac(hTilde, Al, Ar, Lh, Rh, v.reshape(D, d, D)), [], 1);
     % compute eigenvector
     [AcTilde, ~] = eigs(handleAc, D^2*d, 1, 'smallestreal', 'Tolerance', tol, 'StartVector', reshape(Ac, [], 1));
     % calculate new CTilde
     % wrapper around H_C that takes and returns a vector
-    handleC = @(v) reshape(H_C(hTilde, Al, Ar, Lh, Rh, reshape(v, [D, D])), [], 1);
+    handleC = @(v) reahape(H_C(hTilde, Al, Ar, Lh, Rh, v.reshape(D, D)), [], 1);
     % compute eigenvector
     [CTilde, ~] = eigs(handleC, D^2, 1, 'smallestreal', 'Tolerance', tol, 'StartVector', reshape(C, [], 1));
     % reshape to tensors of correct size
@@ -907,7 +1071,7 @@ end
 
 
 function [Al, Ac, Ar, C] = minAcC(AcTilde, CTilde)
-    % Find Al and Ar corresponding to AcTilde and CTilde, according to algorithm 5 in the lecture notes.
+    % Find Al and Ar corresponding to Ac and C, according to algorithm 5 in the lecture notes.
     % 
     %     Parameters
     %     ----------
@@ -972,7 +1136,7 @@ function delta = gradientNorm(hTilde, Al, Ac, Ar, C, Lh, Rh)
     %         MPS tensor zith 3 legs,
     %         ordered left-bottom-right,
     %         right orthonormal.
-    %     Ac : array(D, d, D)
+    %     Ac : np.array(D, d, D)
     %         MPS tensor zith 3 legs,
     %         ordered left-bottom-right,
     %         center gauge.
@@ -994,7 +1158,6 @@ function delta = gradientNorm(hTilde, Al, Ac, Ar, C, Lh, Rh)
     % calculate update on Ac and C using maps H_Ac and H_c
     AcUpdate = H_Ac(hTilde, Al, Ar, Lh, Rh, Ac);
     CUpdate = H_C(hTilde, Al, Ar, Lh, Rh, C);
-    % compute norm of gradient
     AlCupdate = ncon({Al, CUpdate}, {[-1, -2, 1], [1, -3]});
     delta = ArrayNorm(AcUpdate - AlCupdate);
 end    
@@ -1005,12 +1168,12 @@ function [E, Al, Ac, Ar, C] = vumps(h, D, A0, tol)
     % 
     %     Parameters
     %     ----------
-    %     h : array (d, d, d, d)
+    %     h : np.array (d, d, d, d)
     %         Hamiltonian to minimise,
     %         ordered topLeft-topRight-bottomLeft-bottomRight.
     %     D : int
     %         Bond dimension
-    %     A0 : array (D, d, D)
+    %     A0 : np.array (D, d, D)
     %         MPS tensor with 3 legs,
     %         ordered left-bottom-right,
     %         initial guess.
@@ -1021,7 +1184,7 @@ function [E, Al, Ac, Ar, C] = vumps(h, D, A0, tol)
     %     -------
     %     E : float
     %         expectation value @ minimum
-    %     A : array(D, d, D)
+    %     A : np.array(D, d, D)
     %         ground state MPS,
     %         ordered left-mid-right.
     
@@ -1056,9 +1219,106 @@ function [E, Al, Ac, Ar, C] = vumps(h, D, A0, tol)
         Al = AlTilde; Ac = AcTilde; Ar = ArTilde; C = CTilde;
         % print current energy, optional...
         E = real(expVal2Mixed(h, Ac, Ar));
-        fprintf('Current energy: %.14f\n', E);
+        fprintf('Current energy: %d', E);
     end
 end
+
+
+
+%% VUMPS algorithm for 1-dimensional spin chain
+
+function Rh = RightEnvMixed(AR, C, htilde, delta)
+    D = size(AR, 1);
+    xR =  ncon({AR, AR, conj(AR), conj(AR), htilde}, {...
+        [-1 2 1],...
+        [1 3 4],...
+        [-2 7 6],...
+        [6 5 4],...
+        [2 3 7 5]});
+    % for regularizing right transfer matrix: left fixed point is C'*C
+    handleR = @(v) reshape(reshape(v, [D D]) - ncon({reshape(v, [D D]), AR, conj(AR)}, {[1 3], [-1 2 1], [-2 2 3]}) + trace((C'*C)*reshape(v, [D D])) * eye(D), [], 1);
+    Rh = reshape(gmres(handleR, reshape(xR, [], 1), [], delta/10), [D D]); % variable tolerance
+end
+
+function Lh = LeftEnvMixed(AL, C, htilde, delta)
+    D = size(AL, 1);
+    xL =  ncon({AL, AL, conj(AL), conj(AL), htilde}, {...
+        [4 2 1],...
+        [1 3 -2],...
+        [4 5 6],...
+        [6 7 -1],...
+        [2 3 5 7]});
+    % for regularizing right left matrix: right fixed point is C*C'
+    handleL = @(v) reshape(reshape(v, [D D]) - ncon({reshape(v, [D D]), AL, conj(AL)}, {[3 1], [1 2 -2], [3 2 -1]}) + trace(reshape(v, [D D])*(C*C')) * eye(D), [], 1);
+    Lh = reshape(gmres(handleL, reshape(xL, [], 1), [], delta/10), [D D]); % variable tolerance
+end
+
+% function vprime = H_AC(v, AL, AR, Rh, Lh, htilde)
+%     % map in equation (131) in the lecture notes, acting on some three-legged tensor 'v'
+%     centerTerm1 = ncon({AL, v, conj(AL), htilde}, {...
+%         [4 2 1],...
+%         [1 3 -3],...
+%         [4 5 -1],...
+%         [2 3 5 -2]});
+%     
+%     centerTerm2 = ncon({v, AR, conj(AR), htilde}, {...
+%         [-1 2 1],...
+%         [1 3 4],...
+%         [-3 5 4],...
+%         [2 3 -2 5]});
+%     
+%     leftEnvTerm = ncon({Lh, v}, {[-1 1], [1 -2 -3]});
+%     
+%     rightEnvTerm = ncon({v, Rh}, {[-1 -2 1], [1 -3]});
+%     
+%     vprime = centerTerm1 + centerTerm2 + leftEnvTerm + rightEnvTerm;
+% end
+
+% function vprime = H_C(v, AL, AR, Rh, Lh, htilde)
+%     % map in equation (132) in the lecture notes, acting on some two-legged tensor 'v'
+%     centerTerm = ncon({AL, v, AR, conj(AL), conj(AR), htilde}, {...
+%         [5 3 1],...
+%         [1 2],...
+%         [2 4 7],...
+%         [5 6 -1],...
+%         [-2 8 7],...
+%         [3 4 6 8]});
+%     
+%     leftEnvTerm = Lh * v;
+%     
+%     rightEnvTerm = v * Rh;
+%     
+%     vprime = centerTerm + leftEnvTerm + rightEnvTerm;
+% end
+
+function [ACprime, Cprime] = CalculateNewCenter(AL, AR, AC, C, Lh, Rh, htilde, delta)
+    D = size(AL, 1); d = size(AL, 2);
+    % compute action of maps (131) and (132) in the notes and pour this into function handle for eigs
+    handleAC = @(v) reshape(H_AC(reshape(v, [D d D]), AL, AR, Rh, Lh, htilde), [], 1);
+    handleC = @(v) reshape(H_C(reshape(v, [D D]), AL, AR, Rh, Lh, htilde), [], 1);
+    % solve eigenvalue problem using 'smallest real' option
+    [ACprime, ~] = eigs(handleAC, D^2*d, 1, 'smallestreal', 'Tolerance', delta/10, 'StartVector', reshape(AC, [], 1)); % variable tolerance
+    ACprime = reshape(ACprime, [D d D]);
+    [Cprime, ~] = eigs(handleC, D^2, 1, 'smallestreal', 'Tolerance', delta/10, 'StartVector', reshape(C, [], 1)); % variable tolerance
+    Cprime = reshape(Cprime, [D D]);
+end
+
+function [AL, AR, AC, C] = MinAcC(ACprime, Cprime)
+    % algorithm 5 from lecture notes, but adapted so that AR and AL are related properly for regularization of left and right transfer matrix
+    D = size(ACprime, 1); d = size(ACprime, 2);
+    % left polar decomposition
+    [UlAC, ~] = qrpos(reshape(ACprime, [D*d, D]));
+    [UlC, ~] = qrpos(Cprime);
+    AL = reshape(UlAC*UlC', [D d D]);
+    % determine AR through right canonization of AL, and extract C and AC from the result
+    % this gives consistent set of MPS tensors in mixed gauge
+    [AR, C, ~] = RightOrthonormalize(AL);
+    % normalize for mixed gauge
+    nrm = trace(C*C');
+    C = C / sqrt(nrm);
+    AC = ncon({AL, C}, {[-1 -2 1], [1 -3]});
+end
+
 
 
 %%
@@ -1086,9 +1346,9 @@ function l = leftFixedPoint(A)
     [l, ~] = eigs(handleELeft, D^2, 1);
     l = reshape(l, [D D]); % fix shape
     % make left fixed point hermitian and positive semidefinite explicitly
-    l  = l / (trace(l) / abs(trace(l))); % remove possible phase
-    l = (l + l') / 2; % force hermitian
-    l = l * sign(trace(l)); % force positive definite
+    ldag = l';  l = l / sqrt(l(1) / ldag(1));
+    l = (l + l') / 2;
+    l = l * sign(l(1));
 end
 
 
@@ -1098,9 +1358,9 @@ function r = rightFixedPoint(A)
     [r, ~] = eigs(handleERight, D^2, 1);
     r = reshape(r, [D D]); % fix shape r
     % make right fixed point hermitian and positive semidefinite explicitly
-    r  = r / (trace(r) / abs(trace(r))); % remove possible phase
-    r = (r + r') / 2; % force hermitian
-    r = r * sign(trace(r)); % force positive definite
+    rdag = r';  r = r / sqrt(r(1) / rdag(1));
+    r = (r + r') / 2;
+    r = r * sign(r(1));
 end
 
 
