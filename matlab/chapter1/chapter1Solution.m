@@ -29,7 +29,7 @@ D = 5;
 A = createMPS(D, d);
 
 assert(isequal(size(A), [D, d, D]), 'Generated MPS tensor has incorrect shape.')
-assert(~isreal(a), 'MPS tensor should have complex values')
+assert(~isreal(A), 'MPS tensor should have complex values')
 
 
 % normalising an MPS through naive diagonalization of the transfer matrix:
@@ -136,51 +136,51 @@ function A =  createMPS(D, d)
     %         Bond dimension for MPS.
     %     d : int
     %         Physical dimension for MPS.
-    % 
+    %
     %     Returns
     %     -------
     %     A : array (D, d, D)
     %         MPS tensor with 3 legs,
     %         ordered left-bottom-right.
-    
+
     A = rand(D, d, D) + 1i * rand(D, d, D);
 end
 
 
 function E = createTransfermatrix(A)
     % Form the transfermatrix of an MPS.
-    % 
+    %
     %     Parameters
     %     ----------
     %     A : array(D, d, D)
     %         MPS tensor with 3 legs,
     %         ordered left-bottom-right.
-    % 
+    %
     %     Returns
     %     -------
     %     E : array(D, D, D, D)
     %         Transfermatrix with 4 legs,
     %         ordered topLeft-bottomLeft-topRight-bottomRight.
-    
+
     E = ncon({A, conj(A)}, {[-1 1 -3], [-2 1 -4]});
 end
 
 
 function Anew = normaliseMPSNaive(A)
     % Normalise an MPS tensor.
-    % 
+    %
     %     Parameters
     %     ----------
     %     A : array(D, d, D)
     %         MPS tensor with 3 legs,
     %         ordered left-bottom-right.
-    % 
+    %
     %     Returns
     %     -------
     %     Anew : array(D, d, D)
     %         MPS tensor with 3 legs,
     %         ordered left-bottom-right.
-    % 
+    %
     %     Complexity
     %     ----------
     %     O(D ** 6) algorithm,
@@ -195,75 +195,75 @@ end
 
 function l = leftFixedPointNaive(A)
     % Find left fixed point.
-    % 
+    %
     %     Parameters
     %     ----------
     %     A : array(D, d, D)
     %         MPS tensor with 3 legs,
     %         ordered left-bottom-right.
-    % 
+    %
     %     Returns
     %     -------
     %     l : array(D, D)
     %         left fixed point with 2 legs,
     %         ordered bottom-top.
-    % 
+    %
     %     Complexity
     %     ----------
     %     O(D ** 6) algorithm,
     %         diagonalising (D ** 2, D ** 2) matrix.
-    
+
     D = size(A, 1);
     E = createTransfermatrix(A);
     [l, ~] = eigs(reshape(E, [D^2, D^2]).', 1); % find left eigenvector
     l = reshape(l, [D D]).'; % fix shape/order l
     % make left fixed point hermitian and positive semidefinite explicitly
-    ldag = l';  l = l / sqrt(l(1) / ldag(1));
-    l = (l + l') / 2;
-    l = l * sign(l(1));
+    l  = l / (trace(l) / abs(trace(l))); % remove possible phase
+    l = (l + l') / 2; % force hermitian
+    l = l * sign(trace(l)); % force positive definite
 end
 
 
 function r = rightFixedPointNaive(A)
     % Find left fixed point.
-    % 
+    %
     %     Parameters
     %     ----------
     %     A : array(D, d, D)
     %         MPS tensor with 3 legs,
     %         ordered left-bottom-right.
-    % 
+    %
     %     Returns
     %     -------
     %     l : array(D, D)
     %         left fixed point with 2 legs,
     %         ordered bottom-top.
-    % 
+    %
     %     Complexity
     %     ----------
     %     O(D ** 6) algorithm,
     %         diagonalising (D ** 2, D ** 2) matrix.
-    
+
     D = size(A, 1);
     E = createTransfermatrix(A);
     [r, ~] = eigs(reshape(E, [D^2, D^2]), 1); % find right eigenvector
     r = reshape(r, [D D]); % fix shape r
     % make right fixed point hermitian and positive semidefinite explicitly
-    rdag = r';  r = r / sqrt(r(1) / rdag(1));
-    r = (r + r') / 2;
-    r = r * sign(r(1));
+    r  = r / (trace(r) / abs(trace(r))); % remove possible phase
+    r = (r + r') / 2; % force hermitian
+    r = r * sign(trace(r)); % force positive definite
 end
 
 
 function [l, r] = fixedPointsNaive(A)
     % Find normalised fixed points.
-    % 
+    %
     %     Parameters
     %     ----------
     %     A : array(D, d, D)
     %         MPS tensor with 3 legs,
     %         ordered left-bottom-right.
-    % 
+    %
     %     Returns
     %     -------
     %     l : array(D, D)
@@ -272,12 +272,12 @@ function [l, r] = fixedPointsNaive(A)
     %     r : array(D, D)
     %         right fixed point with 2 legs,
     %         ordered top-bottom.
-    % 
+    %
     %     Complexity
     %     ----------
     %     O(D ** 6) algorithm,
-    %         diagonalising (D ** 2, D ** 2) matrix    
-    
+    %         diagonalising (D ** 2, D ** 2) matrix
+
     l = leftFixedPointNaive(A);
     r = rightFixedPointNaive(A);
     l = l / trace(l*r); % normalise
@@ -289,13 +289,13 @@ end
 
 function [L, Al] = leftOrthonormaliseNaive(A, l)
     % Transform A to left-orthonormal gauge.
-    % 
+    %
     %     Parameters
     %     ----------
     %     A : array(D, d, D)
     %         MPS tensor with 3 legs,
     %         ordered left-bottom-right.
-    % 
+    %
     %     Returns
     %     -------
     %     L : array(D, D)
@@ -305,7 +305,7 @@ function [L, Al] = leftOrthonormaliseNaive(A, l)
     %         MPS tensor zith 3 legs,
     %         ordered left-bottom-right,
     %         left orthonormal
-    % 
+    %
     %     Complexity
     %     ----------
     %     O(D ** 6) algorithm,
@@ -322,13 +322,13 @@ end
 
 function [R, Ar] = rightOrthonormaliseNaive(A, r)
     % Transform A to right-orthonormal gauge.
-    % 
+    %
     %     Parameters
     %     ----------
     %     A : array(D, d, D)
     %         MPS tensor with 3 legs,
     %         ordered left-bottom-right.
-    % 
+    %
     %     Returns
     %     -------
     %     R : array(D, D)
@@ -338,7 +338,7 @@ function [R, Ar] = rightOrthonormaliseNaive(A, r)
     %         MPS tensor zith 3 legs,
     %         ordered left-bottom-right,
     %         left orthonormal
-    % 
+    %
     %     Complexity
     %     ----------
     %     O(D ** 6) algorithm,
@@ -355,13 +355,13 @@ end
 
 function [Al, Ac, Ar, C] = mixedCanonicalNaive(A)
     % Bring MPS tensor into mixed gauge, such that -Al-C- = -C-Ar- = Ac.
-    % 
+    %
     %     Parameters
     %     ----------
     %     A : array(D, d, D)
     %         MPS tensor with 3 legs,
     %         ordered left-bottom-right.
-    % 
+    %
     %     Returns
     %     -------
     %     Al : array(D, d, D)
@@ -380,7 +380,7 @@ function [Al, Ac, Ar, C] = mixedCanonicalNaive(A)
     %         Center gauge with 2 legs,
     %         ordered left-right,
     %         diagonal.
-    %             
+    %
     %     Complexity
     %     ----------
     %     O(D ** 6) algorithm,
@@ -403,7 +403,7 @@ end
 %% 1.3 Truncation of a uniform MPS
 function [AlTilde, AcTilde, ArTilde, CTilde] = truncateMPS(A, Dtrunc)
     % Truncate an MPS to a lower bond dimension.
-    % 
+    %
     %     Parameters
     %     ----------
     %     A : np.array(D, d, D)
@@ -411,7 +411,7 @@ function [AlTilde, AcTilde, ArTilde, CTilde] = truncateMPS(A, Dtrunc)
     %         ordered left-bottom-right.
     %     Dtrunc : int
     %         lower bond dimension
-    % 
+    %
     %     Returns
     %     -------
     %     AlTilde : array(Dtrunc, d, Dtrunc)
@@ -430,7 +430,7 @@ function [AlTilde, AcTilde, ArTilde, CTilde] = truncateMPS(A, Dtrunc)
     %         Center gauge with 2 legs,
     %         ordered left-right,
     %         diagonal.
-    
+
     [Al, ~, Ar, C] = mixedCanonical(A);
     % perform SVD and truncate
     [U, C, V] = svd(C);
@@ -452,24 +452,24 @@ end
 
 function Anew =  normaliseMPS(A)
     % Normalise an MPS tensor.
-    % 
+    %
     %     Parameters
     %     ----------
     %     A : array(D, d, D)
     %         MPS tensor with 3 legs,
     %         ordered left-bottom-right.
-    % 
+    %
     %     Returns
     %     -------
     %     Anew : np.array(D, d, D)
     %         MPS tensor with 3 legs,
     %         ordered left-bottom-right.
-    % 
+    %
     %     Complexity
     %     ----------
     %     O(D ** 3) algorithm,
     %         D ** 3 contraction for transfer matrix handle.
-    
+
     D = size(A, 1);
     handleERight = @(v) reshape(ncon({A, conj(A), reshape(v, [D D])}, {[-1 2 1], [-2 2 3], [1 3]}), [], 1); % construct transfer matrix handle
     lambda = eigs(handleERight, D^2, 1);
@@ -479,63 +479,63 @@ end
 
 function l = leftFixedPoint(A)
     % Find left fixed point.
-    % 
+    %
     %     Parameters
     %     ----------
     %     A : array(D, d, D)
     %         MPS tensor with 3 legs,
     %         ordered left-bottom-right.
-    % 
+    %
     %     Returns
     %     -------
     %     l : array(D, D)
     %         left fixed point with 2 legs,
     %         ordered bottom-top.
-    % 
+    %
     %     Complexity
     %     ----------
     %     O(D ** 3) algorithm,
     %          D ** 3 contraction for transfer matrix handle.
-    
+
     D = size(A, 1);
     handleELeft = @(v) reshape(ncon({A, conj(A), reshape(v, [D D])}, {[1 2 -2], [3 2 -1], [3 1]}), [], 1); % construct transfer matrix handle
     [l, ~] = eigs(handleELeft, D^2, 1);
     l = reshape(l, [D D]); % fix shape
     % make left fixed point hermitian and positive semidefinite explicitly
-    ldag = l';  l = l / sqrt(l(1) / ldag(1));
-    l = (l + l') / 2;
-    l = l * sign(l(1));
+    l  = l / (trace(l) / abs(trace(l))); % remove possible phase
+    l = (l + l') / 2; % force hermitian
+    l = l * sign(trace(l)); % force positive definite
 end
 
 
 function r = rightFixedPoint(A)
     % Find left fixed point.
-    % 
+    %
     %     Parameters
     %     ----------
     %     A : array(D, d, D)
     %         MPS tensor with 3 legs,
     %         ordered left-bottom-right.
-    % 
+    %
     %     Returns
     %     -------
     %     l : array(D, D)
     %         left fixed point with 2 legs,
     %         ordered bottom-top.
-    % 
+    %
     %     Complexity
     %     ----------
     %     O(D ** 3) algorithm,
     %          D ** 3 contraction for transfer matrix handle.
-    
+
     D = size(A, 1);
     handleERight = @(v) reshape(ncon({A, conj(A), reshape(v, [D D])}, {[-1 2 1], [-2 2 3], [1 3]}), [], 1); % construct transfer matrix handle
     [r, ~] = eigs(handleERight, D^2, 1);
     r = reshape(r, [D D]); % fix shape r
     % make right fixed point hermitian and positive semidefinite explicitly
-    rdag = r';  r = r / sqrt(r(1) / rdag(1));
-    r = (r + r') / 2;
-    r = r * sign(r(1));
+    r  = r / (trace(r) / abs(trace(r))); % remove possible phase
+    r = (r + r') / 2; % force hermitian
+    r = r * sign(trace(r)); % force positive definite
 end
 
 
