@@ -29,7 +29,7 @@ D = 5;
 A = createMPS(D, d);
 
 assert(isequal(size(A), [D, d, D]), 'Generated MPS tensor has incorrect shape.')
-assert(~isreal(A), 'MPS tensor should have complex values')
+assert(~isreal(a), 'MPS tensor should have complex values')
 
 
 % normalising an MPS through naive diagonalization of the transfer matrix:
@@ -218,9 +218,9 @@ function l = leftFixedPointNaive(A)
     [l, ~] = eigs(reshape(E, [D^2, D^2]).', 1); % find left eigenvector
     l = reshape(l, [D D]).'; % fix shape/order l
     % make left fixed point hermitian and positive semidefinite explicitly
-    l  = l / (trace(l) / abs(trace(l))); % remove possible phase
-    l = (l + l') / 2; % force hermitian
-    l = l * sign(trace(l)); % force positive definite
+    ldag = l';  l = l / sqrt(l(1) / ldag(1));
+    l = (l + l') / 2;
+    l = l * sign(l(1));
 end
 
 
@@ -249,9 +249,9 @@ function r = rightFixedPointNaive(A)
     [r, ~] = eigs(reshape(E, [D^2, D^2]), 1); % find right eigenvector
     r = reshape(r, [D D]); % fix shape r
     % make right fixed point hermitian and positive semidefinite explicitly
-    r  = r / (trace(r) / abs(trace(r))); % remove possible phase
-    r = (r + r') / 2; % force hermitian
-    r = r * sign(trace(r)); % force positive definite
+    rdag = r';  r = r / sqrt(r(1) / rdag(1));
+    r = (r + r') / 2;
+    r = r * sign(r(1));
 end
 
 
@@ -502,9 +502,9 @@ function l = leftFixedPoint(A)
     [l, ~] = eigs(handleELeft, D^2, 1);
     l = reshape(l, [D D]); % fix shape
     % make left fixed point hermitian and positive semidefinite explicitly
-    l  = l / (trace(l) / abs(trace(l))); % remove possible phase
-    l = (l + l') / 2; % force hermitian
-    l = l * sign(trace(l)); % force positive definite
+    ldag = l';  l = l / sqrt(l(1) / ldag(1));
+    l = (l + l') / 2;
+    l = l * sign(l(1));
 end
 
 
@@ -533,9 +533,9 @@ function r = rightFixedPoint(A)
     [r, ~] = eigs(handleERight, D^2, 1);
     r = reshape(r, [D D]); % fix shape r
     % make right fixed point hermitian and positive semidefinite explicitly
-    r  = r / (trace(r) / abs(trace(r))); % remove possible phase
-    r = (r + r') / 2; % force hermitian
-    r = r * sign(trace(r)); % force positive definite
+    rdag = r';  r = r / sqrt(r(1) / rdag(1));
+    r = (r + r') / 2;
+    r = r * sign(r(1));
 end
 
 
