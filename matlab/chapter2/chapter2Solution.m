@@ -15,12 +15,44 @@
 % the script
 
 
-%% Variational optimization of spin-1 Heisenberg Hamiltonian with gradient descent in uniform gauge
+%% 2.2 Gradient descent algorithms
+
+
+% Variational optimization of spin-1 Heisenberg Hamiltonian through
+% minimization of the gradient in uniform gauge
 
 % coupling strengths
 Jx = -1; Jy = -1; Jz = -1; hz = 0; % Heisenberg antiferromagnet
 % Heisenberg Hamiltonian
 h = Heisenberg(Jx, Jy, Jz, hz);
+
+% initialize bond dimension, physical dimension
+D = 6;
+d = 3;
+
+% initialize random MPS
+A = createMPS(D, d);
+A = normaliseMPS(A);
+
+
+% Minimization of the energy through naive gradient descent
+tol = 1e-3;
+disp('Gradient descent optimization:\n')
+tic;
+[E1, A1] = groundStateGradDescent(h, D, 0.1, A, tol, 1e4);
+t1 = toc;
+fprintf('Time until convergence: %ds', t1)
+fprintf('Computed energy: %d\n', E1)
+
+% Minimization of the energy using naive gradient descent:
+tol = 1e-5;
+disp('Optimization using fminunc:\n')
+tic
+[E2, A2] = groundStateMinimise(h, D, A, tol);
+t2 = toc;
+fprintf('Time until convergence: %ds', t2, 's')
+fprintf('Computed energy: %d\n', E2)
+
 
 % % most naive approach: converges to same energy as fminunc
 % A = randcomplex(D, d, D);
@@ -209,9 +241,547 @@ assert(diff1 < 1e-12 && diff2 < 1e-12, 'different gauges give different values?'
 % FUNCTION DEFINITIONS
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-%% spin-1 Heisenberg Hamiltonian
+%% 2.1 The gradient
 
-function h = HeisenbergHamiltonian(Jx, Jy, Jz, hz)
+
+function hTilde = reducedHamUniform(h, A, l, r)
+    % Regularise Hamiltonian such that its expectation value is 0.
+    % 
+    %     Parameters
+    %     ----------
+    %     h : array (d, d, d, d)
+    %         Hamiltonian that needs to be reduced,
+    %         ordered topLeft-topRight-bottomLeft-bottomRight.
+    %     A : array (D, d, D)
+    %         normalised MPS tensor with 3 legs,
+    %         ordered left-bottom-right.
+    %     l : array(D, D), optional
+    %         left fixed point of transfermatrix,
+    %         normalised.
+    %     r : array(D, D), optional
+    %         right fixed point of transfermatrix,
+    %         normalised.
+    % 
+    %     Returns
+    %     -------
+    %     hTilde : array (d, d, d, d)
+    %         reduced Hamiltonian,
+    %         ordered topLeft-topRight-bottomLeft-bottomRight.
+    
+    d = size(A, 2);
+    % calculate fixed points if not supplied
+    if nargin < 4
+        [l, r] = fixedPoints(A);
+    end
+    % calculate expectation value of energy
+    e = real(expVal2Uniform(h, A, l, r));
+    % substract from hamiltonian
+    hTilde = h - e * ncon({eye(d), eye(d)}, {[-1, -3], [-2, -4]});
+end
+
+
+function [term1, term2] = gradCenterTerms(hTilde, A, l, r)
+    % Calculate the value of the center terms.
+    % 
+    %     Parameters
+    %     ----------
+    %     hTilde : np.array (d, d, d, d)
+    %         reduced Hamiltonian,
+    %         ordered topLeft-topRight-bottomLeft-bottomRight.
+    %     A : np.array (D, d, D)
+    %         normalised MPS tensor with 3 legs,
+    %         ordered left-bottom-right.
+    %     l : np.array(D, D), optional
+    %         left fixed point of transfermatrix,
+    %         normalised.
+    %     r : np.array(D, D), optional
+    %         right fixed point of transfermatrix,
+    %         normalised.
+    % 
+    %     Returns
+    %     -------
+    %     term1 : np.array(D, d, D)
+    %         first term of gradient,
+    %         ordered left-mid-right.
+    %     term2 : np.array(D, d, D)
+    %         second term of gradient,
+    %         ordered left-mid-right.
+    
+    % calculate fixed points if not supplied
+    if nargin < 4
+        [l, r] = fixedPoints(A);
+    end
+    % calculate first contraction
+    term1 = ncon({l, r, A, A, conj(A), hTilde}, {[-1, 1], [5, 7], [1, 3, 2], [2, 4, 5], [-3, 6, 7], [3, 4, -2, 6]});
+    % calculate second contraction
+    term2 = ncon({l, r, A, A, conj(A), hTilde}, {[6, 1], [5, -3], [1, 3, 2], [2, 4, 5], [6, 7, -1], [3, 4, 7, -2]});
+end
+
+
+function vNew = EtildeRight(A, l, r, v)
+    % Implement the action of (1 - Etilde) on a right vector v.
+    % 
+    %     Parameters
+    %     ----------
+    %     A : np.array (D, d, D)
+    %         normalised MPS tensor with 3 legs,
+    %         ordered left-bottom-right.
+    %     l : np.array(D, D), optional
+    %         left fixed point of transfermatrix,
+    %         normalised.
+    %     r : np.array(D, D), optional
+    %         right fixed point of transfermatrix,
+    %         normalised.
+    %     v : np.array(D**2)
+    %         right matrix of size (D, D) on which
+    %         (1 - Etilde) acts,
+    %         given as a vector of size (D**2,)
+    % 
+    %     Returns
+    %     -------
+    %     vNew : np.array(D**2)
+    %         result of action of (1 - Etilde)
+    %         on a right matrix,
+    %         given as a vector of size (D**2,)
+
+    D = size(A, 1);
+    % reshape to matrix
+    v = reshape(v, [D D]);
+    % transfermatrix contribution
+    transfer = ncon({A, conj(A), v}, {[-1, 2, 1], [-2, 2, 3], [1, 3]});
+    % fixed point contribution
+    fixed = trace(l * v) * r;
+    % sum these with the contribution of the identity, reshape result to vector
+    vNew = reshape(v - transfer + fixed, [], 1);
+end
+
+
+function Rh = RhUniform(hTilde, A, l, r)
+    % Find the partial contraction for Rh.
+    % 
+    %     Parameters
+    %     ----------
+    %     hTilde : np.array (d, d, d, d)
+    %         reduced Hamiltonian,
+    %         ordered topLeft-topRight-bottomLeft-bottomRight,
+    %         renormalised.
+    %     A : np.array (D, d, D)
+    %         normalised MPS tensor with 3 legs,
+    %         ordered left-bottom-right.
+    %     l : np.array(D, D), optional
+    %         left fixed point of transfermatrix,
+    %         normalised.
+    %     r : np.array(D, D), optional
+    %         right fixed point of transfermatrix,
+    %         normalised.
+    % 
+    %     Returns
+    %     -------
+    %     Rh : np.array(D, D)
+    %         result of contraction,
+    %         ordered top-bottom.
+    
+    D = size(A, 1);
+    % calculate fixed points if not supplied
+    if nargin < 4
+        [l, r] = fixedPoints(A);
+    end
+    % construct b, which is the matrix to the right of (1 - E)^P in the figure in the notebook
+    b = ncon({r, A, A, conj(A), conj(A), hTilde}, {[4, 5], [-1, 2, 1], [1, 3, 4], [-2, 8, 7], [7, 6, 5], [2, 3, 8, 6]});
+    % solve Ax = b for x, where x is Rh, and reshape result to matrix
+    A = @(v) EtildeRight(A, l, r, v);
+    Rh = reshape(gmres(A, reshape(b, [], 1)), [D D]);
+end
+
+
+function leftTerms = gradLeftTerms(hTilde, A, l, r)
+    % Calculate the value of the left terms.
+    % 
+    %     Parameters
+    %     ----------
+    %     hTilde : np.array (d, d, d, d)
+    %         reduced Hamiltonian,
+    %         ordered topLeft-topRight-bottomLeft-bottomRight,
+    %         renormalised.
+    %     A : np.array (D, d, D)
+    %         MPS tensor with 3 legs,
+    %         ordered left-bottom-right.
+    %     l : np.array(D, D), optional
+    %         left fixed point of transfermatrix,
+    %         normalised.
+    %     r : np.array(D, D), optional
+    %         right fixed point of transfermatrix,
+    %         normalised.
+    % 
+    %     Returns
+    %     -------
+    %     leftTerms : np.array(D, d, D)
+    %         left terms of gradient,
+    %         ordered left-mid-right.
+    
+    % calculate fixed points if not supplied
+    if nargin < 4
+        [l, r] = fixedPoints(A);
+    end    
+    % calculate partial contraction
+    Rh = RhUniform(hTilde, A, l, r);
+    % calculate full contraction
+    leftTerms = ncon({Rh, A, l}, {[1, -3], [2, -2, 1], [-1, 2]});
+end
+
+
+function vNew = EtildeLeft(A, l, r, v)
+    % Implement the action of (1 - Etilde) on a left vector matrix v.
+    % 
+    %     Parameters
+    %     ----------
+    %     A : np.array (D, d, D)
+    %         normalised MPS tensor with 3 legs,
+    %         ordered left-bottom-right.
+    %     l : np.array(D, D), optional
+    %         left fixed point of transfermatrix,
+    %         normalised.
+    %     r : np.array(D, D), optional
+    %         right fixed point of transfermatrix,
+    %         normalised.
+    %     v : np.array(D**2)
+    %         right matrix of size (D, D) on which
+    %         (1 - Etilde) acts,
+    %         given as a vector of size (D**2,)
+    % 
+    %     Returns
+    %     -------
+    %     vNew : np.array(D**2)
+    %         result of action of (1 - Etilde)
+    %         on a left matrix,
+    %         given as a vector of size (D**2,)
+    
+    D = size(A, 1);
+    % reshape to matrix
+    v = reshape(v, [D D]);
+    % transfer matrix contribution
+    transfer = ncon({v, A, conj(A)}, {[3, 1], [1, 2, -2], [3, 2, -1]});
+    % fixed point contribution
+    fixed = trace(v * r) * l;
+    % sum these with the contribution of the identity, reshape result to vector
+    vNew = reshape(v - transfer + fixed, [], 1);
+end
+
+
+function Lh = LhUniform(hTilde, A, l, r)
+    % Find the partial contraction for Lh.
+    % 
+    %     Parameters
+    %     ----------
+    %     hTilde : np.array (d, d, d, d)
+    %         reduced Hamiltonian,
+    %         ordered topLeft-topRight-bottomLeft-bottomRight,
+    %         renormalised.
+    %     A : np.array (D, d, D)
+    %         MPS tensor with 3 legs,
+    %         ordered left-bottom-right.
+    %     l : np.array(D, D), optional
+    %         left fixed point of transfermatrix,
+    %         normalised.
+    %     r : np.array(D, D), optional
+    %         right fixed point of transfermatrix,
+    %         normalised.
+    % 
+    %     Returns
+    %     -------
+    %     Lh : np.array(D, D)
+    %         result of contraction,
+    %         ordered bottom-top.
+
+    D = size(A, 1);
+    % calculate fixed points if not supplied
+    if nargin < 4
+        [l, r] = fixedPoints(A);
+    end
+    % construct b, which is the matrix to the right of (1 - E)^P in the figure in the notebook
+    b = ncon({l, A, A, conj(A), conj(A), hTilde}, {[5, 1], [1, 3, 2], [2, 4, -2], [5, 6, 7], [7, 8, -1], [3, 4, 6, 8]});
+    % solve Ax = b for x, where x is Lh, and reshape result to matrix
+    A = @(v) EtildeLeft(A, l, r, v);
+    Lh = reshape(gmres(A, reshape(b, [], 1)), [D D]);
+end
+
+
+function rightTerms =  gradRightTerms(hTilde, A, l, r)
+    % Calculate the value of the right terms.
+    % 
+    %     Parameters
+    %     ----------
+    %     hTilde : np.array (d, d, d, d)
+    %         reduced Hamiltonian,
+    %         ordered topLeft-topRight-bottomLeft-bottomRight,
+    %         renormalised.
+    %     A : np.array (D, d, D)
+    %         MPS tensor with 3 legs,
+    %         ordered left-bottom-right.
+    %     l : np.array(D, D), optional
+    %         left fixed point of transfermatrix,
+    %         normalised.
+    %     r : np.array(D, D), optional
+    %         right fixed point of transfermatrix,
+    %         normalised.
+    % 
+    %     Returns
+    %     -------
+    %     rightTerms : np.array(D, d, D)
+    %         right terms of gradient,
+    %         ordered left-mid-right.
+    
+    % calculate fixed points if not supplied
+    if nargin < 4
+        [l, r] = fixedPoints(A);
+    end    
+    % calculate partial contraction
+    Lh = LhUniform(hTilde, A, l, r);
+    % calculate full contraction
+    rightTerms = ncon({Lh, A, r}, {[-1, 1], [1, -2, 2], [2, -3]});
+end
+
+
+function grad = gradient(h, A, l, r)
+    % Calculate the gradient of the expectation value of h @ MPS A.
+    % 
+    %     Parameters
+    %     ----------
+    %     h : np.array (d, d, d, d)
+    %         Hamiltonian,
+    %         ordered topLeft-topRight-bottomLeft-bottomRight,
+    %         renormalised.
+    %     A : np.array (D, d, D)
+    %         MPS tensor with 3 legs,
+    %         ordered left-bottom-right.
+    %     l : np.array(D, D), optional
+    %         left fixed point of transfermatrix,
+    %         normalised.
+    %     r : np.array(D, D), optional
+    %         right fixed point of transfermatrix,
+    %         normalised.
+    % 
+    %     Returns
+    %     -------
+    %     grad : np.array(D, d, D)
+    %         Gradient,
+    %         ordered left-mid-right.
+    
+    % calculate fixed points if not supplied
+    if nargin < 4
+        [l, r] = fixedPoints(A);
+    end    
+    % regularise Hamiltonian
+    hTilde = reducedHamUniform(h, A, l, r);
+    % find terms
+    [centerTerm1, centerTerm2] = gradCenterTerms(hTilde, A, l, r);
+    leftTerms = gradLeftTerms(hTilde, A, l, r);
+    rightTerms = gradRightTerms(hTilde, A, l, r);
+    grad = 2 * (centerTerm1 + centerTerm2 + leftTerms + rightTerms);
+end
+
+
+function [E, A] = groundStateGradDescent(h, D, eps, A0, tol, maxIter)
+    % Find the ground state using gradient descent.
+    % 
+    %     Parameters
+    %     ----------
+    %     h : np.array (d, d, d, d)
+    %         Hamiltonian to minimise,
+    %         ordered topLeft-topRight-bottomLeft-bottomRight.
+    %     D : int
+    %         Bond dimension
+    %     eps : float
+    %         Stepsize.
+    %     A0 : np.array (D, d, D)
+    %         normalised MPS tensor with 3 legs,
+    %         ordered left-bottom-right,
+    %         initial guess.
+    %     tol : float
+    %         Tolerance for convergence criterium.
+    %     maxIter : int
+    %         Maximum number of iterations.
+    % 
+    %     Returns
+    %     -------
+    %     E : float
+    %         expectation value @ minimum
+    %     A : np.array(D, d, D)
+    %         ground state MPS,
+    %         ordered left-mid-right.
+
+    d = size(h, 1);
+    if nargin < 6
+        maxIter = 1e5;
+    end
+    if nargin < 5
+        tol = 1e-3;
+    end
+    if nargin < 4
+        A0 = createMPS(D, d);
+        A0 = normaliseMPS(A0);
+    end
+    % calculate gradient
+    g = gradient(h, A0);
+    A = A0;
+    i = 0;
+    while ~(all(all(all(abs(g) < tol))))
+        % do a step
+        A = A - eps * g;
+        A = normaliseMPS(A);
+        i = i + 1;
+        
+        if ~(mod(i,100))
+            E = real(expVal2Uniform(h, A));
+            fprintf('Current energy: %d', E)
+        end
+        % calculate new gradient
+        g = gradient(h, A);
+        if i > maxIter
+            disp('Warning: gradient descent did not converge!')
+        end
+    end
+    % calculate ground state energy
+    E = real(expVal2Uniform(h, A));
+end
+
+
+function A = unwrapper(varA, D, d)
+    % Unwraps real MPS vector to complex MPS tensor.
+    % 
+    %     Parameters
+    %     ----------
+    %     varA : array(2 * D * d * D)
+    %         MPS tensor in real vector form.
+    %     D : int
+    %         Bond dimension.
+    %     d : int
+    %         Physical dimension.
+    % 
+    %     Returns
+    %     -------
+    %     A : array(D, d, D)
+    %         MPS tensor with 3 legs,
+    %         ordered left-bottom-right.
+        
+    % unpack real and imaginary part
+    Areal = varA(1:D^2 * d);
+    Aimag = varA(D^2 * d:end);
+    A = reshape(complex(Areal, Aimag), [D d D]);
+end
+
+
+function varA = wrapper(A)
+    % Wraps MPS tensor to real MPS vector.
+    % 
+    %     Parameters
+    %     ----------
+    %     A : array(D, d, D)
+    %         MPS tensor,
+    %         ordered left-bottom-right
+    % 
+    %     Returns
+    %     -------
+    %     varA : array(2 * D * d * D)
+    %         MPS tensor in real vector form.
+        
+    % split into real and imaginary part
+    Areal = reshape(real(A), [], 1);
+    Aimag = reshape(imag(A), [], 1);
+    % combine into vector
+    varA = [Areal; Aimag];
+end
+        
+
+function [e, g] = energyDensity(varA, D, d)
+    %     Function to optimize via fminunc.
+    % 
+    %         Parameters
+    %         ----------
+    %         varA : np.array(2 * D * d * D)
+    %             MPS tensor in real vector form.
+    % 
+    %         Returns
+    %         -------
+    %         e : float
+    %             function value @varA
+    %         g : np.array(2 * D * d * D)
+    %             gradient vector @varA
+        
+    % unwrap varA
+    A = unwrapper(varA, D, d);
+    A = normaliseMPS(A);
+    % calculate fixed points
+    [l, r] = fixedPoints(A);
+    % calculate function value and gradient
+    e = real(expVal2Uniform(h, A, l, r));
+    g = gradient(h, A, l, r);
+    % wrap g
+    g = wrapper(g);
+end
+
+
+function [E, Aopt] = groundStateMinimise(h, D, A0, tol)
+    % Find the ground state using the MATLAB fminunc minimizer.
+    % 
+    %     Parameters
+    %     ----------
+    %     h : array (d, d, d, d)
+    %         Hamiltonian to minimise,
+    %         ordered topLeft-topRight-bottomLeft-bottomRight.
+    %     D : int
+    %         Bond dimension
+    %     A0 : array (D, d, D)
+    %         MPS tensor with 3 legs,
+    %         ordered left-bottom-right,
+    %         initial guess.
+    %     tol : float
+    %         Relative convergence criterium.
+    % 
+    %     Returns
+    %     -------
+    %     E : float
+    %         expectation value @ minimum
+    %     A : array(D, d, D)
+    %         ground state MPS,
+    %         ordered left-mid-right.
+    
+    d = size(h, 1);
+    if nargin < 5
+        tol = 1e-4;
+    end
+    if nargin < 4
+        A0 = createMPS(D, d);
+        A0 = normaliseMPS(A0);
+    end
+    varA0 = wrapper(A0);
+    % calculate minimum
+    energyHandle = @(varA) energyDensity(varA, D, d);
+    options = optimoptions('fminunc', 'SpecifyObjectiveGradient', true, 'Display', 'iter', 'OptimalityTolerance', tol);
+    [varAopt, E] = fminunc(energyHandle, varA0, options);
+    Aopt = normaliseMPS(unwrapper(varAopt, D, d));
+end
+
+
+function h = Heisenberg(Jx, Jy, Jz, hz)
+    % Construct the spin-1 Heisenberg Hamiltonian for given couplings.
+    % 
+    %     Parameters
+    %     ----------
+    %     Jx : float
+    %         Coupling strength in x direction
+    %     Jy : float
+    %         Coupling strength in y direction
+    %     Jy : float
+    %         Coupling strength in z direction
+    %     hz : float
+    %         Coupling for Sz terms
+    % 
+    %     Returns
+    %     -------
+    %     h : array (3, 3, 3, 3)
+    %         Spin-1 Heisenberg Hamiltonian.
+    
     % spin-1 angular momentum operators
     Sx = [0 1 0; 1 0 1; 0 1 0] / sqrt(2);
     Sy = [0 -1 0; 1 0 -1; 0 1 0] * 1i / sqrt(2);
@@ -221,68 +791,439 @@ function h = HeisenbergHamiltonian(Jx, Jy, Jz, hz)
             - hz*ncon({Sz, eye(3)}, {[-1 -3], [-2 -4]}) - hz*ncon({eye(3), eye(3)}, {[-1 -3], [-2 -4]});
 end
 
-%% MPS optimization in uniform gauge using gradient descent
 
-function g = EnergyGradient(A, l, r, htilde)
-    D = size(A, 1);
-    % center terms first; easy ones
-    centerTerm1 = ncon({l, r, A, A, conj(A), htilde}, {...
-        [6 1],...
-        [5 -3],...
-        [1 3 2],...
-        [2 4 5],...
-        [6 7 -1],...
-        [3 4 7 -2]});
-    centerTerm2 = ncon({l, r, A, A, conj(A), htilde}, {...
-        [-1 1],...
-        [5 7],...
-        [1 3 2],...
-        [2 4 5],...
-        [-3 6 7],...
-        [3 4 -2 6]});
+%% 2.3 VUMPS
+
+
+function hTilde = reducedHamMixed(h, Ac, Ar)
+    % Regularise Hamiltonian such that its expectation value is 0.
+    % 
+    %     Parameters
+    %     ----------
+    %     h : array (d, d, d, d)
+    %         Hamiltonian that needs to be reduced,
+    %         ordered topLeft-topRight-bottomLeft-bottomRight.
+    %     Ac : array(D, d, D)
+    %         MPS tensor with 3 legs,
+    %         ordered left-bottom-right,
+    %         center gauged.
+    %     Ar : array(D, d, D)
+    %         MPS tensor with 3 legs,
+    %         ordered left-bottom-right,
+    %         right gauged.
+    % 
+    %     Returns
+    %     -------
+    %     hTilde : array (d, d, d, d)
+    %         reduced Hamiltonian,
+    %         ordered topLeft-topRight-bottomLeft-bottomRight.
     
-    % left environment
-    xL =  ncon({l, A, A, conj(A), conj(A), htilde}, {...
-        [5 1],...
-        [1 3 2],...
-        [2 4 -2],...
-        [5 6 7],...
-        [7 8 -1],...
-        [3 4 6 8]});
-    handleL = @(v) reshape(reshape(v, [D D]) - ncon({reshape(v, [D D]), A, conj(A)}, {[3 1], [1 2 -2], [3 2 -1]}) + trace(reshape(v, [D D])*r) * l, [], 1);
-    Lh = reshape(gmres(handleL, reshape(xL, [], 1)), [D D]);
-    leftEnvTerm = ncon({Lh, A, r}, {[-1 1], [1 -2 2], [2 -3]});
-    
-    % right environment
-    xR =  ncon({r, A, A, conj(A), conj(A), htilde}, {...
-        [4 5],...
-        [-1 2 1],...
-        [1 3 4],...
-        [-2 8 7],...
-        [7 6 5],...
-        [2 3 8 6]});
-    handleR = @(v) reshape(reshape(v, [D D]) - ncon({reshape(v, [D D]), A, conj(A)}, {[1 3], [-1 2 1], [-2 2 3]}) + trace(l*reshape(v, [D D])) * r, [], 1);
-    Rh = reshape(gmres(handleR, reshape(xR, [], 1)), [D D]);
-    rightEnvTerm = ncon({Rh, A, l}, {[1 -3], [2 -2 1], [-1 2]});
-    
-    % construct gradient out of these 4 terms
-    g = 2 * (centerTerm1 + centerTerm2 + leftEnvTerm + rightEnvTerm);
+    d = size(Ac, 2);
+    % calculate expectation value
+    e = real(expVal2Mixed(h, Ac, Ar));
+    % substract from hamiltonian
+    hTilde = h - e * ncon({eye(d), eye(d)}, {[-1, -3], [-2, -4]});
 end
 
-function [e, g] = EnergyDensity(A, h)
-    d = size(A, 2);
-    [A, l, r] = NormalizeMPS(A); % normalize MPS
-    e = real(ExpvTwoSiteUniform(A, l, r, h)); % compute energy density of MPS (discard numerical imaginary artefact)
-    htilde = h - e * ncon({eye(d), eye(d)}, {[-1 -3], [-2 -4]}); % regularized energy density
-    g = EnergyGradient(A, l, r, htilde); % calculate gradient of energy density
+
+function Rh = RhMixed(hTilde, Ar, C, tol)
+    % Calculate Rh, for a given MPS in mixed gauge.
+    % 
+    %     Parameters
+    %     ----------
+    %     hTilde : array (d, d, d, d)
+    %         reduced Hamiltonian,
+    %         ordered topLeft-topRight-bottomLeft-bottomRight,
+    %         renormalised.
+    %     Ar : array (D, d, D)
+    %         MPS tensor with 3 legs,
+    %         ordered left-bottom-right,
+    %         right-orthonormal.
+    %     C : array(D, D)
+    %         Center gauge with 2 legs,
+    %         ordered left-right.
+    %     tol : float, optional
+    %         tolerance for gmres
+    % 
+    %     Returns
+    %     -------
+    %     Rh : array(D, D)
+    %         result of contraction,
+    %         ordered top-bottom.
+    
+    D = size(Ar, 1);
+    if nargin < 4
+        tol = 1e-4;
+    end
+    % construct fixed points for Ar
+    l = C' * C; % left fixed point of right transfer matrix
+    r = eye(D); % right fixed point of right transfer matrix: right orthonormal
+    % construct b
+    b = ncon({Ar, Ar, np.conj(Ar), np.conj(Ar), hTilde}, {[-1, 2, 1], [1, 3, 4], [-2, 7, 6], [6, 5, 4], [2, 3, 7, 5]});
+    % solve Ax = b for x
+    A = @(v) EtildeRight(Ar, l, r, v);
+    [Rh, ~] = gmres(A, reshape(b, [], 1), [], tol);
+    Rh = reshape(Rh, [D D]);
 end
 
-function [e, g] = EnergyWrapper(varA, h, D, d)
-    % just wrapper around the EnergyDensity function that takes MPS tensor as a vector and returns the gradient as a vector
-    A = complex(reshape(varA(1:D^2*d), [D d D]), reshape(varA(D^2*d+1:end), [D d D]));
-    [e, g] = EnergyDensity(A, h);
-    g = [reshape(real(g), [], 1); reshape(imag(g), [], 1)];
+
+function Lh = LhMixed(hTilde, Al, C, tol)
+    % Calculate Lh, for a given MPS in mixed gauge.
+    % 
+    %     Parameters
+    %     ----------
+    %     hTilde : array (d, d, d, d)
+    %         reduced Hamiltonian,
+    %         ordered topLeft-topRight-bottomLeft-bottomRight,
+    %         renormalised.
+    %     Al : array (D, d, D)
+    %         MPS tensor with 3 legs,
+    %         ordered left-bottom-right,
+    %         left-orthonormal.
+    %     C : array(D, D)
+    %         Center gauge with 2 legs,
+    %         ordered left-right.
+    %     tol : float, optional
+    %         tolerance for gmres
+    % 
+    %     Returns
+    %     -------
+    %     Lh : array(D, D)
+    %         result of contraction,
+    %         ordered bottom-top.
+    
+    D = size(Al, 1);
+    if nargin < 4
+        tol = 1e-4;
+    end
+    % construct fixed points for Ar
+    l = eye(D); % left fixed point of right transfer matrix
+    r = C * C'; % right fixed point of right transfer matrix: right orthonormal
+    % construct b
+    b = ncon({Al, Al, np.conj(Al), np.conj(Al), hTilde}, {[4, 2, 1], [1, 3, -2], [4, 5, 6], [6, 7, -1], [2, 3, 5, 7]});
+    % solve Ax = b for x
+    A = @(v) EtildeLeft(Al, l, r, v);
+    [Lh, ~] = gmres(A, reshape(b, [], 1), [], tol);
+    Lh = reshape(Lh, [D D]);
 end
+
+
+function H_AcV = H_Ac(hTilde, Al, Ar, Lh, Rh, v)
+    % Action of the effective Hamiltonian for Ac (131) on a vector.
+    % 
+    %     Parameters
+    %     ----------
+    %     hTilde : array (d, d, d, d)
+    %         reduced Hamiltonian,
+    %         ordered topLeft-topRight-bottomLeft-bottomRight,
+    %         renormalised.
+    %     Al : array (D, d, D)
+    %         MPS tensor with 3 legs,
+    %         ordered left-bottom-right,
+    %         left-orthonormal.
+    %     Ar : array (D, d, D)
+    %         MPS tensor with 3 legs,
+    %         ordered left-bottom-right,
+    %         right-orthonormal.
+    %     Lh : array(D, D)
+    %         left environment,
+    %         ordered bottom-top.
+    %     Rh : array(D, D)
+    %         right environment,
+    %         ordered top-bottom.
+    %     v : np.array(D, d, D)
+    %         Tensor of size (D, d, D)
+    % 
+    %     Returns
+    %     -------
+    %     H_AcV : array(D, d, D)
+    %         Result of the action of H_Ac on the vector v,
+    %         representing a tensor of size (D, d, D)
+
+    % first term
+    term1 = ncon({Al, v, np.conj(Al), hTilde}, {[4, 2, 1], [1, 3, -3], [4, 5, -1], [2, 3, 5, -2]});
+    % second term
+    term2 = ncon({v, Ar, np.conj(Ar), hTilde}, {[-1, 2, 1], [1, 3, 4], [-3, 5, 4], [2, 3, -2, 5]});
+    % third term
+    term3 = ncon({Lh, v}, {[-1, 1], [1, -2, -3]});
+    % fourth term
+    term4 = ncon({v, Rh}, {[-1, -2, 1], [1, -3]});
+    % sum
+    H_AcV = term1 + term2 + term3 + term4;
+end
+
+
+function H_CV = H_C(hTilde, Al, Ar, Lh, Rh, v)
+    % Action of the effective Hamiltonian for Ac (131) on a vector.
+    % 
+    %     Parameters
+    %     ----------
+    %     hTilde : array (d, d, d, d)
+    %         reduced Hamiltonian,
+    %         ordered topLeft-topRight-bottomLeft-bottomRight,
+    %         renormalised.
+    %     Al : array (D, d, D)
+    %         MPS tensor with 3 legs,
+    %         ordered left-bottom-right,
+    %         left-orthonormal.
+    %     Ar : array (D, d, D)
+    %         MPS tensor with 3 legs,
+    %         ordered left-bottom-right,
+    %         right-orthonormal.
+    %     Lh : array(D, D)
+    %         left environment,
+    %         ordered bottom-top.
+    %     Rh : array(D, D)
+    %         right environment,
+    %         ordered top-bottom.
+    %     v : array(D, D)
+    %         Matrix of size (D, D)
+    % 
+    %     Returns
+    %     -------
+    %     H_CV : array(D, D)
+    %         Result of the action of H_C on the matrix v.
+
+    % first term
+    term1 = ncon({Al, v, Ar, np.conj(Al), np.conj(Ar), hTilde}, {[5, 3, 1], [1, 2], [2, 4, 7], [5, 6, -1], [-2, 8, 7], [3, 4, 6, 8]});
+    % second term
+    term2 = Lh * v;
+    % third term
+    term3 = v * Rh;
+    % sum
+    H_CV = term1 + term2 + term3;
+end
+
+
+function [AcTilde, CTilde] = calcNewCenter(hTilde, Al, Ac, Ar, C, Lh, Rh, tol)
+    % Find new guess for Ac and C as fixed points of the maps H_Ac and H_C.
+    % 
+    %     Parameters
+    %     ----------
+    %     hTilde : array (d, d, d, d)
+    %         reduced Hamiltonian,
+    %         ordered topLeft-topRight-bottomLeft-bottomRight,
+    %         renormalised.
+    %     Al : array(D, d, D)
+    %         MPS tensor zith 3 legs,
+    %         ordered left-bottom-right,
+    %         left orthonormal.
+    %     Ar : array(D, d, D)
+    %         MPS tensor zith 3 legs,
+    %         ordered left-bottom-right,
+    %         right orthonormal.
+    %     Ac : array(D, d, D)
+    %         MPS tensor zith 3 legs,
+    %         ordered left-bottom-right,
+    %         center gauge.
+    %     C : array(D, D)
+    %         Center gauge with 2 legs,
+    %         ordered left-right,
+    %         diagonal.
+    %     Lh : array(D, D)
+    %         left environment,
+    %         ordered bottom-top.
+    %     Rh : array(D, D)
+    %         right environment,
+    %         ordered top-bottom.
+    %     tol : float, optional
+    %         current tolerance
+    % 
+    %     Returns
+    %     -------
+    %     AcTilde : np.array(D, d, D)
+    %         MPS tensor zith 3 legs,
+    %         ordered left-bottom-right,
+    %         center gauge.
+    %     CTilde : np.array(D, D)
+    %         Center gauge with 2 legs,
+    %         ordered left-right.
+    
+    D = size(Al, 1);
+    d = size(Al, 2);
+    if nargin < 8
+        tol = 1e-4;
+    end
+    if nargin < 7
+        Rh = RhMixed(hTilde, Ar, C, tol);
+    end
+    if nargin < 6
+        Lh = LhMixed(hTilde, Al, C, tol);
+    end
+    % calculate new AcTilde
+    % wrapper around H_Ac that takes and returns a vector
+    handleAc = @(v) reshape(H_Ac(hTilde, Al, Ar, Lh, Rh, v.reshape(D, d, D)), [], 1);
+    % compute eigenvector
+    [AcTilde, ~] = eigs(handleAc, D^2*d, 1, 'smallestreal', 'Tolerance', tol, 'StartVector', reshape(Ac, [], 1));
+    % calculate new CTilde
+    % wrapper around H_C that takes and returns a vector
+    handleC = @(v) reahape(H_C(hTilde, Al, Ar, Lh, Rh, v.reshape(D, D)), [], 1);
+    % compute eigenvector
+    [CTilde, ~] = eigs(handleC, D^2, 1, 'smallestreal', 'Tolerance', tol, 'StartVector', reshape(C, [], 1));
+    % reshape to tensors of correct size
+    AcTilde = reshape(AcTilde, [D d D]);
+    CTilde = reshape(CTilde, [D D]);
+end
+
+
+% Polar decomposition is implemented in the function 'poldec' in the folder
+% 'AuxiliaryFunctions'
+
+
+function [Al, Ac, Ar, C] = minAcC(AcTilde, CTilde)
+    % Find Al and Ar corresponding to Ac and C, according to algorithm 5 in the lecture notes.
+    % 
+    %     Parameters
+    %     ----------
+    %     AcTilde : array(D, d, D)
+    %         MPS tensor with 3 legs,
+    %         ordered left-bottom-right,
+    %         new guess for center gauge. 
+    %     CTilde : array(D, D)
+    %         Center gauge with 2 legs,
+    %         ordered left-right,
+    %         new guess for center gauge
+    % 
+    %     Returns
+    %     -------
+    %     Al : array(D, d, D)
+    %         MPS tensor zith 3 legs,
+    %         ordered left-bottom-right,
+    %         left orthonormal.
+    %     Ar : array(D, d, D)
+    %         MPS tensor zith 3 legs,
+    %         ordered left-bottom-right,
+    %         right orthonormal.
+    %     Ac : array(D, d, D)
+    %         MPS tensor with 3 legs,
+    %         ordered left-bottom-right,
+    %         center gauge. 
+    %     C : array(D, D)
+    %         Center gauge with 2 legs,
+    %         ordered left-right,
+    %         center gauge
+        
+    D = size(AcTilde, 1);
+    d = size(AcTilde, 2);
+    % polar decomposition of Ac
+    [UlAc, ~] = poldec(reshape(AcTilde, [D * d, D]));
+    % polar decomposition of C
+    [UlC, ~] = poldec(CTilde);
+    % construct Al
+    Al = reshape(UlAc * UlC', [D d D]);
+    % find corresponding Ar, C, and Ac through right orthonormalising Al
+    [C, Ar] = rightOrthonormalise(Al);
+    nrm = trace(C * C');
+    C = C / sqrt(nrm);
+    Ac = ncon({Al, C}, {[-1, -2, 1], [1, -3]});
+end
+    
+
+function delta = gradientNorm(hTilde, Al, Ac, Ar, C, Lh, Rh)
+    % Calculate the norm of the gradient.
+    % 
+    %     Parameters
+    %     ----------
+    %     hTilde : array (d, d, d, d)
+    %         reduced Hamiltonian,
+    %         ordered topLeft-topRight-bottomLeft-bottomRight,
+    %         renormalised.
+    %     Al : array(D, d, D)
+    %         MPS tensor zith 3 legs,
+    %         ordered left-bottom-right,
+    %         left orthonormal.
+    %     Ar : array(D, d, D)
+    %         MPS tensor zith 3 legs,
+    %         ordered left-bottom-right,
+    %         right orthonormal.
+    %     Ac : np.array(D, d, D)
+    %         MPS tensor zith 3 legs,
+    %         ordered left-bottom-right,
+    %         center gauge.
+    %     C : array(D, D)
+    %         Center gauge with 2 legs,
+    %         ordered left-right.
+    %     Lh : array(D, D)
+    %         left environment,
+    %         ordered bottom-top.
+    %     Rh : array(D, D)
+    %         right environment,
+    %         ordered top-bottom.
+    % 
+    %     Returns
+    %     -------
+    %     delta : float
+    %         norm of the gradient @Al, Ac, Ar, C
+    
+    % calculate update on Ac and C using maps H_Ac and H_c
+    AcUpdate = H_Ac(hTilde, Al, Ar, Lh, Rh, Ac);
+    CUpdate = H_C(hTilde, Al, Ar, Lh, Rh, C);
+    AlCupdate = ncon({Al, CUpdate}, {[-1, -2, 1], [1, -3]});
+    delta = ArrayNorm(AcUpdate - AlCupdate);
+end    
+
+
+function [E, Al, Ac, Ar, C] = vumps(h, D, A0, tol)
+    % Find the ground state of a given Hamiltonian using VUMPS.
+    % 
+    %     Parameters
+    %     ----------
+    %     h : np.array (d, d, d, d)
+    %         Hamiltonian to minimise,
+    %         ordered topLeft-topRight-bottomLeft-bottomRight.
+    %     D : int
+    %         Bond dimension
+    %     A0 : np.array (D, d, D)
+    %         MPS tensor with 3 legs,
+    %         ordered left-bottom-right,
+    %         initial guess.
+    %     tol : float
+    %         Relative convergence criterium.
+    % 
+    %     Returns
+    %     -------
+    %     E : float
+    %         expectation value @ minimum
+    %     A : np.array(D, d, D)
+    %         ground state MPS,
+    %         ordered left-mid-right.
+    
+    if nargin < 4
+        tol = 1e-4;
+    end
+    if nargin < 3
+        A0 = createMPS(D, d);
+        A0 = normaliseMPS(A0);
+    end
+    % go to mixed gauge
+    [Al, Ac, Ar, C] = mixedCanonical(A0);
+    flag = true;
+    delta = 1e-5;
+    while flag
+        % regularise H
+        hTilde = reducedHamMixed(h, Ac, Ar);
+        % calculate environments
+        Lh = LhMixed(hTilde, Al, C, delta/10);
+        Rh = RhMixed(hTilde, Ar, C, delta/10);
+        % calculate new center
+        [AcTilde, CTilde] = calcNewCenter(hTilde, Al, Ac, Ar, C, Lh, Rh, tol);
+        % find Al, Ar from new Ac, C
+        [AlTilde, AcTilde, ArTilde, CTilde] = minAcC(AcTilde, CTilde);
+        % calculate norm
+        delta = gradientNorm(hTilde, Al, Ac, Ar, C, Lh, Rh);
+        % check convergence
+        if delta < tol
+            flag = false;
+        end
+        % update tensors
+        Al = AlTilde; Ac = AcTilde; Ar = ArTilde; C = CTilde;
+        % print current energy, optional...
+        E = real(expVal2Mixed(h, Ac, Ar));
+        fprintf('Current energy: %d', E);
+    end
+end
+
+
 
 %% VUMPS algorithm for 1-dimensional spin chain
 
@@ -312,43 +1253,43 @@ function Lh = LeftEnvMixed(AL, C, htilde, delta)
     Lh = reshape(gmres(handleL, reshape(xL, [], 1), [], delta/10), [D D]); % variable tolerance
 end
 
-function vprime = H_AC(v, AL, AR, Rh, Lh, htilde)
-    % map in equation (131) in the lecture notes, acting on some three-legged tensor 'v'
-    centerTerm1 = ncon({AL, v, conj(AL), htilde}, {...
-        [4 2 1],...
-        [1 3 -3],...
-        [4 5 -1],...
-        [2 3 5 -2]});
-    
-    centerTerm2 = ncon({v, AR, conj(AR), htilde}, {...
-        [-1 2 1],...
-        [1 3 4],...
-        [-3 5 4],...
-        [2 3 -2 5]});
-    
-    leftEnvTerm = ncon({Lh, v}, {[-1 1], [1 -2 -3]});
-    
-    rightEnvTerm = ncon({v, Rh}, {[-1 -2 1], [1 -3]});
-    
-    vprime = centerTerm1 + centerTerm2 + leftEnvTerm + rightEnvTerm;
-end
+% function vprime = H_AC(v, AL, AR, Rh, Lh, htilde)
+%     % map in equation (131) in the lecture notes, acting on some three-legged tensor 'v'
+%     centerTerm1 = ncon({AL, v, conj(AL), htilde}, {...
+%         [4 2 1],...
+%         [1 3 -3],...
+%         [4 5 -1],...
+%         [2 3 5 -2]});
+%     
+%     centerTerm2 = ncon({v, AR, conj(AR), htilde}, {...
+%         [-1 2 1],...
+%         [1 3 4],...
+%         [-3 5 4],...
+%         [2 3 -2 5]});
+%     
+%     leftEnvTerm = ncon({Lh, v}, {[-1 1], [1 -2 -3]});
+%     
+%     rightEnvTerm = ncon({v, Rh}, {[-1 -2 1], [1 -3]});
+%     
+%     vprime = centerTerm1 + centerTerm2 + leftEnvTerm + rightEnvTerm;
+% end
 
-function vprime = H_C(v, AL, AR, Rh, Lh, htilde)
-    % map in equation (132) in the lecture notes, acting on some two-legged tensor 'v'
-    centerTerm = ncon({AL, v, AR, conj(AL), conj(AR), htilde}, {...
-        [5 3 1],...
-        [1 2],...
-        [2 4 7],...
-        [5 6 -1],...
-        [-2 8 7],...
-        [3 4 6 8]});
-    
-    leftEnvTerm = Lh * v;
-    
-    rightEnvTerm = v * Rh;
-    
-    vprime = centerTerm + leftEnvTerm + rightEnvTerm;
-end
+% function vprime = H_C(v, AL, AR, Rh, Lh, htilde)
+%     % map in equation (132) in the lecture notes, acting on some two-legged tensor 'v'
+%     centerTerm = ncon({AL, v, AR, conj(AL), conj(AR), htilde}, {...
+%         [5 3 1],...
+%         [1 2],...
+%         [2 4 7],...
+%         [5 6 -1],...
+%         [-2 8 7],...
+%         [3 4 6 8]});
+%     
+%     leftEnvTerm = Lh * v;
+%     
+%     rightEnvTerm = v * Rh;
+%     
+%     vprime = centerTerm + leftEnvTerm + rightEnvTerm;
+% end
 
 function [ACprime, Cprime] = CalculateNewCenter(AL, AR, AC, C, Lh, Rh, htilde, delta)
     D = size(AL, 1); d = size(AL, 2);
