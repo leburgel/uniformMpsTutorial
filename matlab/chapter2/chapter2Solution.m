@@ -1086,9 +1086,9 @@ function l = leftFixedPoint(A)
     [l, ~] = eigs(handleELeft, D^2, 1);
     l = reshape(l, [D D]); % fix shape
     % make left fixed point hermitian and positive semidefinite explicitly
-    ldag = l';  l = l / sqrt(l(1) / ldag(1));
-    l = (l + l') / 2;
-    l = l * sign(l(1));
+    l  = l / (trace(l) / abs(trace(l))); % remove possible phase
+    l = (l + l') / 2; % force hermitian
+    l = l * sign(trace(l)); % force positive definite
 end
 
 
@@ -1098,9 +1098,9 @@ function r = rightFixedPoint(A)
     [r, ~] = eigs(handleERight, D^2, 1);
     r = reshape(r, [D D]); % fix shape r
     % make right fixed point hermitian and positive semidefinite explicitly
-    rdag = r';  r = r / sqrt(r(1) / rdag(1));
-    r = (r + r') / 2;
-    r = r * sign(r(1));
+    r  = r / (trace(r) / abs(trace(r))); % remove possible phase
+    r = (r + r') / 2; % force hermitian
+    r = r * sign(trace(r)); % force positive definite
 end
 
 

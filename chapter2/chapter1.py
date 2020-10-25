@@ -127,9 +127,9 @@ def leftFixedPoint(A):
     l = l.reshape((D, D))
     
     # make left fixed point hermitian explicitly
-    l /= np.sqrt((l[0, 0] / np.conj(l).T[0, 0])) # get rid of possible phase
+    l /= (np.trace(l) / np.abs(np.trace(l)))# remove possible phase
     l = (l + np.conj(l).T) / 2 # force hermitian
-    l *= np.sign(l[0, 0]) # force positive semidefinite
+    l *= np.sign(np.trace(l)) # force positive semidefinite
 
     return l
 
@@ -169,9 +169,9 @@ def rightFixedPoint(A):
     r = r.reshape((D, D))
     
     # make right fixed point hermitian explicitly
-    r /= np.sqrt((r[0, 0] / np.conj(r).T[0, 0])) # get rid of possible phase
+    r /= (np.trace(r) / np.abs(np.trace(r)))# remove possible phase
     r = (r + np.conj(r).T) / 2 # force hermitian
-    r *= np.sign(r[0, 0]) # force positive semidefinite
+    r *= np.sign(np.trace(r)) # force positive semidefinite
     
     return r
 
