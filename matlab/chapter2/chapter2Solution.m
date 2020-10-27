@@ -95,6 +95,17 @@ scatter(1:D, diag(S), 'x')
 title('Entanglement spectrum of ground state')
 set(gca, 'YScale', 'log')
 
+%% 2.4 Elementary excitations
+
+% compute the Haldane gap of the spin-1 Heisenberg atniferromagnet using
+% the quasiparticle ansatz
+
+p=pi; num=3;
+[x,e]=quasiParticle(h,Al,Ar,Ac,C,p,num);
+e=diag(e);
+disp(['First triplet: ',num2str(e')])
+
+
 %%
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -1058,6 +1069,76 @@ function [E, Al, Ac, Ar, C] = vumps(h, D, A0, tol)
         E = real(expVal2Mixed(h, Ac, Ar));
         fprintf('Current energy: %.14f\n', E);
     end
+end
+
+
+%% 2.4 Elementary excitations
+
+function [x,e]=quasiParticle(h,Al,Ar,Ac,C,p,num)
+
+tol=1e-12; D=size(Al,1); d=size(Al,2);
+% renormalize hamiltonian and find left and right environments
+hTilde = reducedHamMixed(h, Ac, Ar);
+Lh = LhMixed(hTilde, Al, C, tol);
+Rh = RhMixed(hTilde, Ar, C, tol);
+
+% find reduced parametrization
+L=reshape(permute(conj(Al),[3 1 2]),[D D*d]);
+VL = reshape(null(L),[D d D*(d-1)]);
+
+[x,e] = eigs(@(x)ApplyHeff(x),D^2*(d-1),num,'sr');
+
+
+function y=ApplyHeff(x)
+        
+    x=reshape(x,[D*(d-1) D]);
+    B=ncon({VL,x},{[-1,-2,1],[1,-3]},1);
+    
+    % right disconnected
+    right=ncon({B,conj(Ar)},{[-1,2,1],[-2,2,1]});
+    [right, ~] = gmres(@(v)ApplyELR(v,p), reshape(right, [], 1), [], tol);
+    right = reshape(right, [D D]);
+    
+    % left disconnected
+    left=...
+        1*ncon({Lh,B,conj(Al)},{[1,2],[2,3,-2],[1,3,-1]})+...
+        1*ncon({Al,B,conj(Al),conj(Al),hTilde},{[1,2,4],[4,5,-2],[1,3,6],[6,7,-1],[3,7,2,5]})+...
+        exp(-1i*p)*ncon({B,Ar,conj(Al),conj(Al),hTilde},{[1,2,4],[4,5,-2],[1,3,6],[6,7,-1],[3,7,2,5]});
+    [left, ~] = gmres(@(v)ApplyERL(v,-p), reshape(left, [], 1), [], tol);
+    left = reshape(left, [D D]);
+    
+    y=...
+        1*ncon({B,Ar,conj(Ar),hTilde},{[-1,2,1],[1,3,4],[-3,5,4],[-2,5,2,3]})+...
+        exp(1i*p)*ncon({Al,B,conj(Ar),hTilde},{[-1,2,1],[1,3,4],[-3,5,4],[-2,5,2,3]})+...
+        exp(-1i*p)*ncon({B,Ar,conj(Al),hTilde},{[4,3,1],[1,2,-3],[4,5,-1],[5,-2,3,2]})+...
+        1*ncon({Al,B,conj(Al),hTilde},{[4,3,1],[1,2,-3],[4,5,-1],[5,-2,3,2]})+...
+        exp(1i*p)*ncon({Al,Al,conj(Al),right,hTilde},{[1,2,4],[4,5,6],[1,3,-1],[6,-3],[3,-2,2,5]})+...
+        exp(2*1i*p)*ncon({Al,Al,conj(Ar),right,hTilde},{[-1,6,5],[5,3,2],[-3,4,1],[2,1],[-2,4,6,3]})+...
+        1*ncon({Lh,B},{[-1,1],[1,-2,-3]})+...
+        1*ncon({B,Rh},{[-1,-2,1],[1,-3]})+...
+        exp(-1i*p)*ncon({left,Ar},{[-1,1],[1,-2,-3]})+...
+        exp(+1i*p)*ncon({Lh,Al,right},{[-1,1],[1,-2,2],[2,-3]});
+        
+    y=ncon({y,conj(VL)},{[1,2,-2],[1,2,-1]});
+    y=reshape(y,[],1);
+    
+    end
+
+    function y=ApplyELR(x,p)
+        x=reshape(x,[D D]);
+        overlap=ncon({conj(C),x},{[1,2],[1,2]});
+        y=ncon({Al,conj(Ar),x},{[-1,3,1],[-2,3,2],[1,2]});
+        y=x-exp(1i*p)*(y-overlap*C);
+        y=reshape(y,[D^2 1]);
+    end
+    function y=ApplyERL(x,p)
+        x=reshape(x,[D D]);
+        overlap=ncon({conj(C),x},{[1,2],[1,2]});
+        y=ncon({x,Ar,conj(Al)},{[1,2],[2,3,-2],[1,3,-1]});
+        y=x-exp(1i*p)*(y-overlap*C);
+        y=reshape(y,[D^2 1]);
+    end
+
 end
 
 
