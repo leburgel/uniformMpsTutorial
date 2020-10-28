@@ -20,7 +20,7 @@ jupyter notebook
 
 For performing contractions of tensor networks, we have opted to use the python implementation of the <code>ncon</code> contractor (https://arxiv.org/abs/1402.0939), which can be found at https://github.com/mhauru/ncon. There are undoubtedly many contraction tools that work equally well and any of them may of course be used, but this one has a particularly intuituve and handy syntax. To install ncon, you may run
 ```console
-pip install notebook
+pip install ncon
 ```
 but we have also just included the source code for the ncon function in the tutorial folder for convenience.
 
