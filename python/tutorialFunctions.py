@@ -32,12 +32,12 @@ def createMPS(D, d):
         A : np.array (D, d, D)
             MPS tensor with 3 legs,
             ordered left-bottom-right,
-            normalised.
+            normalized.
     """
 
     A = np.random.rand(D, d, D) + 1j * np.random.rand(D, d, D)
 
-    return normaliseMPS(A)
+    return normalizeMPS(A)
 
 
 def createTransfermatrix(A):
@@ -62,9 +62,9 @@ def createTransfermatrix(A):
     return E
 
 
-def normaliseMPS(A):
+def normalizeMPS(A):
     """
-    Normalise an MPS tensor.
+    Normalize an MPS tensor.
 
         Parameters
         ----------
@@ -185,7 +185,7 @@ def rightFixedPoint(A):
 
 def fixedPoints(A):
     """
-    Find normalised fixed points.
+    Find normalized fixed points.
 
         Parameters
         ----------
@@ -256,7 +256,7 @@ def rqPos(A):
     return R, Q
 
 
-def rightOrthonormalise(A, R0=None, tol=1e-14, maxIter=1e5):
+def rightOrthonormalize(A, R0=None, tol=1e-14, maxIter=1e5):
     """
     Transform A to right-orthonormal gauge.
 
@@ -280,23 +280,24 @@ def rightOrthonormalise(A, R0=None, tol=1e-14, maxIter=1e5):
             right gauge with 2 legs,
             ordered left-right.
         Ar : np.array(D, d, D)
-            MPS tensor zith 3 legs,
+            MPS tensor with 3 legs,
             ordered left-bottom-right,
             right-orthonormal
     """
 
     D = A.shape[0]
     d = A.shape[1]
+    tol = max(tol, 1e-14)
     i = 1
 
     # Random guess for R0 if none specified
     if R0 is None:
         R0 = np.random.rand(D, D)
 
-    # Normalise R0
+    # Normalize R0
     R0 = R0 / np.linalg.norm(R0)
 
-    # Initialise loop
+    # Initialize loop
     R, Ar = rqPos(np.reshape(ncon((A, R0), ([-1, -2, 1], [1, -3])), (D, D * d)))
     R = R / np.linalg.norm(R)
     convergence = np.linalg.norm(R - R0)
@@ -306,7 +307,7 @@ def rightOrthonormalise(A, R0=None, tol=1e-14, maxIter=1e5):
         # calculate AR and decompose
         Rnew, Ar = rqPos(np.reshape(ncon((A, R), ([-1, -2, 1], [1, -3])), (D, D * d)))
 
-        # normalise new R
+        # normalize new R
         Rnew = Rnew / np.linalg.norm(Rnew)
 
         # calculate convergence criterium
@@ -361,7 +362,7 @@ def qrPos(A):
     return Q, R
 
 
-def leftOrthonormalise(A, L0=None, tol=1e-14, maxIter=1e5):
+def leftOrthonormalize(A, L0=None, tol=1e-14, maxIter=1e5):
     """
     Transform A to left-orthonormal gauge.
 
@@ -385,23 +386,24 @@ def leftOrthonormalise(A, L0=None, tol=1e-14, maxIter=1e5):
             left gauge with 2 legs,
             ordered left-right.
         Al : np.array(D, d, D)
-            MPS tensor zith 3 legs,
+            MPS tensor with 3 legs,
             ordered left-bottom-right,
             left-orthonormal
     """
 
     D = A.shape[0]
     d = A.shape[1]
+    tol = max(tol, 1e-14)
     i = 1
 
     # Random guess for L0 if none specified
     if L0 is None:
         L0 = np.random.rand(D, D)
 
-    # Normalise L0
+    # Normalize L0
     L0 = L0 / np.linalg.norm(L0)
 
-    # Initialise loop
+    # Initialize loop
     Al, L = qrPos(np.reshape(ncon((L0, A), ([-1, 1], [1, -2, -3])), (D * d, D)))
     L = L / np.linalg.norm(L)
     convergence = np.linalg.norm(L - L0)
@@ -411,7 +413,7 @@ def leftOrthonormalise(A, L0=None, tol=1e-14, maxIter=1e5):
         # calculate LA and decompose
         Al, Lnew = qrPos(np.reshape(ncon((L, A), ([-1, 1], [1, -2, -3])), (D * d, D)))
 
-        # normalise new L
+        # normalize new L
         Lnew = Lnew / np.linalg.norm(Lnew)
 
         # calculate convergence criterium
@@ -440,15 +442,15 @@ def mixedCanonical(A, L0=None, R0=None, tol=1e-14, maxIter=1e5):
         Returns
         -------
         Al : np.array(D, d, D)
-            MPS tensor zith 3 legs,
+            MPS tensor with 3 legs,
             ordered left-bottom-right,
             left orthonormal.
         Ac : np.array(D, d, D)
-            MPS tensor zith 3 legs,
+            MPS tensor with 3 legs,
             ordered left-bottom-right,
             center gauge.
         Ar : np.array(D, d, D)
-            MPS tensor zith 3 legs,
+            MPS tensor with 3 legs,
             ordered left-bottom-right,
             right orthonormal.
         C : np.array(D, D)
@@ -462,6 +464,7 @@ def mixedCanonical(A, L0=None, R0=None, tol=1e-14, maxIter=1e5):
     """
 
     D = A.shape[0]
+    tol = max(tol, 1e-14)
 
     # Random guess for  L0 if none specified
     if L0 is None:
@@ -472,13 +475,13 @@ def mixedCanonical(A, L0=None, R0=None, tol=1e-14, maxIter=1e5):
         R0 = np.random.rand(D, D)
 
     # Compute left and right orthonormal forms
-    L, Al = leftOrthonormalise(A, L0, tol, maxIter)
-    R, Ar = rightOrthonormalise(A, R0, tol, maxIter)
+    L, Al = leftOrthonormalize(A, L0, tol, maxIter)
+    R, Ar = rightOrthonormalize(A, R0, tol, maxIter)
 
     # center matrix C is matrix multiplication of L and R
     C = L @ R
 
-    # singular value decomposition to diagonalise C
+    # singular value decomposition to diagonalize C
     U, S, Vdag = svd(C)
     C = np.diag(S)
 
@@ -486,7 +489,7 @@ def mixedCanonical(A, L0=None, R0=None, tol=1e-14, maxIter=1e5):
     Al = ncon((np.conj(U).T, Al, U), ([-1, 1], [1, -2, 2], [2, -3]))
     Ar = ncon((Vdag, Ar, np.conj(Vdag).T), ([-1, 1], [1, -2, 2], [2, -3]))
 
-    # normalise center matrix
+    # normalize center matrix
     norm = np.trace(C @ np.conj(C).T)
     C /= np.sqrt(norm)
 
@@ -541,15 +544,15 @@ def truncateMPS(A, Dtrunc):
         Returns
         -------
         AlTilde : np.array(Dtrunc, d, Dtrunc)
-            MPS tensor zith 3 legs,
+            MPS tensor with 3 legs,
             ordered left-bottom-right,
             left orthonormal.
         AcTilde : np.array(Dtrunc, d, Dtrunc)
-            MPS tensor zith 3 legs,
+            MPS tensor with 3 legs,
             ordered left-bottom-right,
             center gauge.
         ArTilde : np.array(Dtrunc, d, Dtrunc)
-            MPS tensor zith 3 legs,
+            MPS tensor with 3 legs,
             ordered left-bottom-right,
             right orthonormal.
         CTilde : np.array(Dtrunc, Dtrunc)
@@ -571,7 +574,7 @@ def truncateMPS(A, Dtrunc):
     ArTilde = ncon((Vdag, Ar, np.conj(Vdag).T), ([-1, 1], [1, -2, 2], [2, -3]))
     CTilde = np.diag(S)
 
-    # renormalise
+    # renormalize
     norm = np.trace(CTilde @ np.conj(CTilde).T)
     CTilde /= np.sqrt(norm)
 
@@ -593,10 +596,10 @@ def expVal1Uniform(O, A, l=None, r=None):
             ordered left-bottom-right.
         l : np.array(D, D), optional
             left fixed point of transfermatrix,
-            normalised.
+            normalized.
         r : np.array(D, D), optional
             right fixed point of transfermatrix,
-            normalised.
+            normalized.
 
         Returns
         -------
@@ -653,10 +656,10 @@ def expVal2Uniform(O, A, l=None, r=None):
             ordered left-bottom-right.
         l : np.array(D, D), optional
             left fixed point of transfermatrix,
-            normalised.
+            normalized.
         r : np.array(D, D), optional
             right fixed point of transfermatrix,
-            normalised.
+            normalized.
 
         Returns
         -------
@@ -719,14 +722,14 @@ def gradCenterTerms(hTilde, A, l=None, r=None):
             reduced Hamiltonian,
             ordered topLeft-topRight-bottomLeft-bottomRight.
         A : np.array (D, d, D)
-            normalised MPS tensor with 3 legs,
+            normalized MPS tensor with 3 legs,
             ordered left-bottom-right.
         l : np.array(D, D), optional
             left fixed point of transfermatrix,
-            normalised.
+            normalized.
         r : np.array(D, D), optional
             right fixed point of transfermatrix,
-            normalised.
+            normalized.
         
         Returns
         -------
@@ -753,7 +756,7 @@ def gradCenterTerms(hTilde, A, l=None, r=None):
 
 def reducedHamUniform(h, A, l=None, r=None):
     """
-    Regularise Hamiltonian such that its expectation value is 0.
+    Regularize Hamiltonian such that its expectation value is 0.
     
         Parameters
         ----------
@@ -761,14 +764,14 @@ def reducedHamUniform(h, A, l=None, r=None):
             Hamiltonian that needs to be reduced,
             ordered topLeft-topRight-bottomLeft-bottomRight.
         A : np.array (D, d, D)
-            normalised MPS tensor with 3 legs,
+            normalized MPS tensor with 3 legs,
             ordered left-bottom-right.
         l : np.array(D, D), optional
             left fixed point of transfermatrix,
-            normalised.
+            normalized.
         r : np.array(D, D), optional
             right fixed point of transfermatrix,
-            normalised.
+            normalized.
             
         Returns
         -------
@@ -799,14 +802,14 @@ def EtildeRight(A, l, r, v):
         Parameters
         ----------
         A : np.array (D, d, D)
-            normalised MPS tensor with 3 legs,
+            normalized MPS tensor with 3 legs,
             ordered left-bottom-right.
         l : np.array(D, D), optional
             left fixed point of transfermatrix,
-            normalised.
+            normalized.
         r : np.array(D, D), optional
             right fixed point of transfermatrix,
-            normalised.
+            normalized.
         v : np.array(D**2)
             right matrix of size (D, D) on which
             (1 - Etilde) acts,
@@ -846,16 +849,16 @@ def RhUniform(hTilde, A, l=None, r=None):
         hTilde : np.array (d, d, d, d)
             reduced Hamiltonian,
             ordered topLeft-topRight-bottomLeft-bottomRight,
-            renormalised.
+            renormalized.
         A : np.array (D, d, D)
-            normalised MPS tensor with 3 legs,
+            normalized MPS tensor with 3 legs,
             ordered left-bottom-right.
         l : np.array(D, D), optional
             left fixed point of transfermatrix,
-            normalised.
+            normalized.
         r : np.array(D, D), optional
             right fixed point of transfermatrix,
-            normalised.
+            normalized.
         
         Returns
         -------
@@ -889,16 +892,16 @@ def gradLeftTerms(hTilde, A, l=None, r=None):
         hTilde : np.array (d, d, d, d)
             reduced Hamiltonian,
             ordered topLeft-topRight-bottomLeft-bottomRight,
-            renormalised.
+            renormalized.
         A : np.array (D, d, D)
             MPS tensor with 3 legs,
             ordered left-bottom-right.
         l : np.array(D, D), optional
             left fixed point of transfermatrix,
-            normalised.
+            normalized.
         r : np.array(D, D), optional
             right fixed point of transfermatrix,
-            normalised.
+            normalized.
         
         Returns
         -------
@@ -927,14 +930,14 @@ def EtildeLeft(A, l, r, v):
         Parameters
         ----------
         A : np.array (D, d, D)
-            normalised MPS tensor with 3 legs,
+            normalized MPS tensor with 3 legs,
             ordered left-bottom-right.
         l : np.array(D, D), optional
             left fixed point of transfermatrix,
-            normalised.
+            normalized.
         r : np.array(D, D), optional
             right fixed point of transfermatrix,
-            normalised.
+            normalized.
         v : np.array(D**2)
             right matrix of size (D, D) on which
             (1 - Etilde) acts,
@@ -974,16 +977,16 @@ def LhUniform(hTilde, A, l=None, r=None):
         hTilde : np.array (d, d, d, d)
             reduced Hamiltonian,
             ordered topLeft-topRight-bottomLeft-bottomRight,
-            renormalised.
+            renormalized.
         A : np.array (D, d, D)
             MPS tensor with 3 legs,
             ordered left-bottom-right.
         l : np.array(D, D), optional
             left fixed point of transfermatrix,
-            normalised.
+            normalized.
         r : np.array(D, D), optional
             right fixed point of transfermatrix,
-            normalised.
+            normalized.
         
         Returns
         -------
@@ -1017,16 +1020,16 @@ def gradRightTerms(hTilde, A, l=None, r=None):
         hTilde : np.array (d, d, d, d)
             reduced Hamiltonian,
             ordered topLeft-topRight-bottomLeft-bottomRight,
-            renormalised.
+            renormalized.
         A : np.array (D, d, D)
             MPS tensor with 3 legs,
             ordered left-bottom-right.
         l : np.array(D, D), optional
             left fixed point of transfermatrix,
-            normalised.
+            normalized.
         r : np.array(D, D), optional
             right fixed point of transfermatrix,
-            normalised.
+            normalized.
         
         Returns
         -------
@@ -1057,16 +1060,16 @@ def gradient(h, A, l=None, r=None):
         h : np.array (d, d, d, d)
             Hamiltonian,
             ordered topLeft-topRight-bottomLeft-bottomRight,
-            renormalised.
+            renormalized.
         A : np.array (D, d, D)
             MPS tensor with 3 legs,
             ordered left-bottom-right.
         l : np.array(D, D), optional
             left fixed point of transfermatrix,
-            normalised.
+            normalized.
         r : np.array(D, D), optional
             right fixed point of transfermatrix,
-            normalised.
+            normalized.
         
         Returns
         -------
@@ -1079,7 +1082,7 @@ def gradient(h, A, l=None, r=None):
     if l is None or r is None:
         l, r = fixedPoints(A)
         
-    # renormalise Hamiltonian
+    # renormalize Hamiltonian
     hTilde = reducedHamUniform(h, A, l, r)
         
     # find terms
@@ -1099,14 +1102,14 @@ def groundStateGradDescent(h, D, eps=1e-1, A0=None, tol=1e-4, maxIter=1e4):
         Parameters
         ----------
         h : np.array (d, d, d, d)
-            Hamiltonian to minimise,
+            Hamiltonian to minimize,
             ordered topLeft-topRight-bottomLeft-bottomRight.
         D : int
             Bond dimension
         eps : float
             Stepsize.
         A0 : np.array (D, d, D)
-            normalised MPS tensor with 3 legs,
+            normalized MPS tensor with 3 legs,
             ordered left-bottom-right,
             initial guess.
         tol : float
@@ -1126,7 +1129,7 @@ def groundStateGradDescent(h, D, eps=1e-1, A0=None, tol=1e-4, maxIter=1e4):
     # if no initial value, choose random
     if A0 is None:
         A0 = createMPS(D, d)
-        A0 = normaliseMPS(A0)
+        A0 = normalizeMPS(A0)
     
     # calculate gradient
     g = gradient(h, A0)
@@ -1137,7 +1140,7 @@ def groundStateGradDescent(h, D, eps=1e-1, A0=None, tol=1e-4, maxIter=1e4):
     while not(np.all(np.abs(g) < tol)):
         # do a step
         A = A - eps * g
-        A = normaliseMPS(A)
+        A = normalizeMPS(A)
         i += 1
         
         if not(i % 100):
@@ -1157,14 +1160,14 @@ def groundStateGradDescent(h, D, eps=1e-1, A0=None, tol=1e-4, maxIter=1e4):
     return E, A
 
 
-def groundStateMinimise(h, D, A0=None, tol=1e-4):
+def groundStateMinimize(h, D, A0=None, tol=1e-4):
     """
     Find the ground state using a scipy minimizer.
     
         Parameters
         ----------
         h : np.array (d, d, d, d)
-            Hamiltonian to minimise,
+            Hamiltonian to minimize,
             ordered topLeft-topRight-bottomLeft-bottomRight.
         D : int
             Bond dimension
@@ -1242,7 +1245,7 @@ def groundStateMinimise(h, D, A0=None, tol=1e-4):
     # if no initial MPS, take random one
     if A0 is None:
         A0 = createMPS(D, d)
-        A0 = normaliseMPS(A0)
+        A0 = normalizeMPS(A0)
     
     # define f for minimize in scipy
     def f(varA):
@@ -1264,7 +1267,7 @@ def groundStateMinimise(h, D, A0=None, tol=1e-4):
         
         # unwrap varA
         A = unwrapper(varA)
-        A = normaliseMPS(A)
+        A = normalizeMPS(A)
         
         # calculate fixed points
         l, r = fixedPoints(A)
@@ -1318,7 +1321,7 @@ def Heisenberg(Jx, Jy, Jz, hz):
 
 def reducedHamMixed(h, Ac, Ar):
     """
-    Regularise Hamiltonian such that its expectation value is 0.
+    Regularize Hamiltonian such that its expectation value is 0.
     
         Parameters
         ----------
@@ -1352,7 +1355,7 @@ def reducedHamMixed(h, Ac, Ar):
     return hTilde
 
 
-def RhMixed(hTilde, Ar, C, tol=1e-3):
+def RhMixed(hTilde, Ar, C, tol=1e-5):
     """
     Calculate Rh, for a given MPS in mixed gauge.
     
@@ -1361,7 +1364,7 @@ def RhMixed(hTilde, Ar, C, tol=1e-3):
         hTilde : np.array (d, d, d, d)
             reduced Hamiltonian,
             ordered topLeft-topRight-bottomLeft-bottomRight,
-            renormalised.
+            renormalized.
         Ar : np.array (D, d, D)
             MPS tensor with 3 legs,
             ordered left-bottom-right,
@@ -1380,6 +1383,7 @@ def RhMixed(hTilde, Ar, C, tol=1e-3):
     """
     
     D = Ar.shape[0]
+    tol = max(tol, 1e-14)
     
     # construct fixed points for Ar
     l = np.conj(C).T @ C # left fixed point of right transfer matrix
@@ -1395,7 +1399,7 @@ def RhMixed(hTilde, Ar, C, tol=1e-3):
     return Rh.reshape((D, D))
 
 
-def LhMixed(hTilde, Al, C, tol=1e-3):
+def LhMixed(hTilde, Al, C, tol=1e-5):
     """
     Calculate Lh, for a given MPS in mixed gauge.
     
@@ -1404,7 +1408,7 @@ def LhMixed(hTilde, Al, C, tol=1e-3):
         hTilde : np.array (d, d, d, d)
             reduced Hamiltonian,
             ordered topLeft-topRight-bottomLeft-bottomRight,
-            renormalised.
+            renormalized.
         Al : np.array (D, d, D)
             MPS tensor with 3 legs,
             ordered left-bottom-right,
@@ -1424,6 +1428,7 @@ def LhMixed(hTilde, Al, C, tol=1e-3):
     """
     
     D = Al.shape[0]
+    tol = max(tol, 1e-14)
     
     # construct fixed points for Al
     l = np.eye(D) # left fixed point of left transfer matrix: left orthonormal
@@ -1448,7 +1453,7 @@ def H_Ac(hTilde, Al, Ar, Lh, Rh, v):
         hTilde : np.array (d, d, d, d)
             reduced Hamiltonian,
             ordered topLeft-topRight-bottomLeft-bottomRight,
-            renormalised.
+            renormalized.
         Al : np.array (D, d, D)
             MPS tensor with 3 legs,
             ordered left-bottom-right,
@@ -1501,7 +1506,7 @@ def H_C(hTilde, Al, Ar, Lh, Rh, v):
         hTilde : np.array (d, d, d, d)
             reduced Hamiltonian,
             ordered topLeft-topRight-bottomLeft-bottomRight,
-            renormalised.
+            renormalized.
         Al : np.array (D, d, D)
             MPS tensor with 3 legs,
             ordered left-bottom-right,
@@ -1541,7 +1546,7 @@ def H_C(hTilde, Al, Ar, Lh, Rh, v):
     return H_CV
 
 
-def calcNewCenter(hTilde, Al, Ac, Ar, C, Lh=None, Rh=None, tol=1e-3):
+def calcNewCenter(hTilde, Al, Ac, Ar, C, Lh=None, Rh=None, tol=1e-5):
     """
     Find new guess for Ac and C as fixed points of the maps H_Ac and H_C.
     
@@ -1550,17 +1555,17 @@ def calcNewCenter(hTilde, Al, Ac, Ar, C, Lh=None, Rh=None, tol=1e-3):
         hTilde : np.array (d, d, d, d)
             reduced Hamiltonian,
             ordered topLeft-topRight-bottomLeft-bottomRight,
-            renormalised.
+            renormalized.
         Al : np.array(D, d, D)
-            MPS tensor zith 3 legs,
+            MPS tensor with 3 legs,
             ordered left-bottom-right,
             left orthonormal.
         Ar : np.array(D, d, D)
-            MPS tensor zith 3 legs,
+            MPS tensor with 3 legs,
             ordered left-bottom-right,
             right orthonormal.
         Ac : np.array(D, d, D)
-            MPS tensor zith 3 legs,
+            MPS tensor with 3 legs,
             ordered left-bottom-right,
             center gauge.
         C : np.array(D, D)
@@ -1579,7 +1584,7 @@ def calcNewCenter(hTilde, Al, Ac, Ar, C, Lh=None, Rh=None, tol=1e-3):
         Returns
         -------
         AcTilde : np.array(D, d, D)
-            MPS tensor zith 3 legs,
+            MPS tensor with 3 legs,
             ordered left-bottom-right,
             center gauge.
         CTilde : np.array(D, D)
@@ -1589,6 +1594,7 @@ def calcNewCenter(hTilde, Al, Ac, Ar, C, Lh=None, Rh=None, tol=1e-3):
     
     D = Al.shape[0]
     d = Al.shape[1]
+    tol = max(tol, 1e-14)
     
     # calculate left en right environment if they are not given
     if Lh is None:
@@ -1622,7 +1628,7 @@ def calcNewCenter(hTilde, Al, Ac, Ar, C, Lh=None, Rh=None, tol=1e-3):
     return AcTilde, CTilde
 
 
-def minAcC(AcTilde, CTilde):
+def minAcC(AcTilde, CTilde, tol=1e-5):
     """
     Find Al and Ar corresponding to Ac and C, according to algorithm 5 in the lecture notes.
     
@@ -1660,6 +1666,7 @@ def minAcC(AcTilde, CTilde):
     
     D = AcTilde.shape[0]
     d = AcTilde.shape[1]
+    tol = max(tol, 1e-14)
     
     # polar decomposition of Ac
     UlAc, _ = polar(AcTilde.reshape((D * d, D)))
@@ -1670,8 +1677,8 @@ def minAcC(AcTilde, CTilde):
     # construct Al
     Al = (UlAc @ np.conj(UlC).T).reshape(D, d, D)
     
-    # find corresponding Ar, C, and Ac through right orthonormalising Al
-    C, Ar = rightOrthonormalise(Al)
+    # find corresponding Ar, C, and Ac through right orthonormalizing Al
+    C, Ar = rightOrthonormalize(Al, CTilde, tol=tol)
     nrm = np.trace(C @ np.conj(C).T)
     C = C / np.sqrt(nrm)
     Ac = ncon((Al, C), ([-1, -2, 1], [1, -3]))
@@ -1688,17 +1695,17 @@ def gradientNorm(hTilde, Al, Ac, Ar, C, Lh, Rh):
         hTilde : np.array (d, d, d, d)
             reduced Hamiltonian,
             ordered topLeft-topRight-bottomLeft-bottomRight,
-            renormalised.
+            renormalized.
         Al : np.array(D, d, D)
-            MPS tensor zith 3 legs,
+            MPS tensor with 3 legs,
             ordered left-bottom-right,
             left orthonormal.
         Ar : np.array(D, d, D)
-            MPS tensor zith 3 legs,
+            MPS tensor with 3 legs,
             ordered left-bottom-right,
             right orthonormal.
         Ac : np.array(D, d, D)
-            MPS tensor zith 3 legs,
+            MPS tensor with 3 legs,
             ordered left-bottom-right,
             center gauge.
         C : np.array(D, D)
@@ -1727,14 +1734,14 @@ def gradientNorm(hTilde, Al, Ac, Ar, C, Lh, Rh):
     return norm
 
 
-def vumps(h, D, A0=None, tol=1e-4):
+def vumps(h, D, A0=None, tol=1e-4, tolFactor=1e-2, verbose=True):
     """
     Find the ground state of a given Hamiltonian using VUMPS.
     
         Parameters
         ----------
         h : np.array (d, d, d, d)
-            Hamiltonian to minimise,
+            Hamiltonian to minimize,
             ordered topLeft-topRight-bottomLeft-bottomRight.
         D : int
             Bond dimension
@@ -1767,18 +1774,18 @@ def vumps(h, D, A0=None, tol=1e-4):
     delta = 1e-5
     
     while flag:
-        # regularise H
+        # regularize H
         hTilde = reducedHamMixed(h, Ac, Ar)
         
         # calculate environments
-        Lh = LhMixed(hTilde, Al, C, tol=delta/10)
-        Rh = RhMixed(hTilde, Ar, C, tol=delta/10)
+        Lh = LhMixed(hTilde, Al, C, tol=delta*tolFactor)
+        Rh = RhMixed(hTilde, Ar, C, tol=delta*tolFactor)
         
         # calculate new center
-        AcTilde, CTilde = calcNewCenter(hTilde, Al, Ac, Ar, C, Lh, Rh, tol=delta/10)
+        AcTilde, CTilde = calcNewCenter(hTilde, Al, Ac, Ar, C, Lh, Rh, tol=delta*tolFactor)
         
         # find Al, Ar from Ac, C
-        AlTilde, AcTilde, ArTilde, CTilde = minAcC(AcTilde, CTilde)
+        AlTilde, AcTilde, ArTilde, CTilde = minAcC(AcTilde, CTilde, tol=delta*tolFactor**2)
         
         # calculate norm
         delta = gradientNorm(hTilde, Al, Ac, Ar, C, Lh, Rh)
@@ -1800,18 +1807,6 @@ def vumps(h, D, A0=None, tol=1e-4):
 """
 Chapter 3
 """
-
-
-
-
-
-
-
-
-
-
-
-
 
 def leftFixedPointMPO(O, Al, tol):
     """
@@ -1972,7 +1967,7 @@ def O_C(X, Fl, Fr):
     return Xnew
 
 
-def calcNewCenterMPO(O, Ac, C, Fl, Fr, lam, tol=1e-3):
+def calcNewCenterMPO(O, Ac, C, Fl, Fr, lam, tol=1e-5):
     """
     Find new guess for Ac and C as fixed points of the maps O_Ac and O_C.
     
@@ -2002,7 +1997,7 @@ def calcNewCenterMPO(O, Ac, C, Fl, Fr, lam, tol=1e-3):
         Returns
         -------
         AcTilde : np.array(D, d, D)
-            MPS tensor zith 3 legs,
+            MPS tensor with 3 legs,
             ordered left-bottom-right,
             center gauge.
         CTilde : np.array(D, D)
@@ -2031,7 +2026,7 @@ def calcNewCenterMPO(O, Ac, C, Fl, Fr, lam, tol=1e-3):
     return AcTilde, CTilde
 
 
-def vumpsMPO(O, D, A0=None, tol=1e-4):
+def vumpsMpo(O, D, A0=None, tol=1e-4):
     """
     Find the fixed point MPS of a given MPO using VUMPS.
     
@@ -2054,11 +2049,11 @@ def vumpsMPO(O, D, A0=None, tol=1e-4):
         lam : float
             Leading eigenvalue.
         Al : np.array(D, d, D)
-            MPS tensor zith 3 legs,
+            MPS tensor with 3 legs,
             ordered left-bottom-right,
             left orthonormal.
         Ar : np.array(D, d, D)
-            MPS tensor zith 3 legs,
+            MPS tensor with 3 legs,
             ordered left-bottom-right,
             right orthonormal.
         Ac : np.array(D, d, D)

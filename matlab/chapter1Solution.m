@@ -20,7 +20,7 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 
-%% 1.1 Normalisation
+%% 1.1 Normalization
 
 d = 3;
 D = 5;
@@ -32,8 +32,8 @@ assert(isequal(size(A), [D, d, D]), 'Generated MPS tensor has incorrect shape.')
 assert(~isreal(A), 'MPS tensor should have complex values')
 
 
-% normalising an MPS through naive diagonalization of the transfer matrix:
-A = normaliseMPSNaive(A);
+% normalizing an MPS through naive diagonalization of the transfer matrix:
+A = normalizeMPSNaive(A);
 [l, r] = fixedPointsNaive(A);
 
 assert(ArrayIsEqual(l, l', 1e-12), 'left fixed point should be hermitian!')
@@ -41,15 +41,15 @@ assert(ArrayIsEqual(r, r', 1e-12), 'left fixed point should be hermitian!')
 
 assert(ArrayIsEqual(l, ncon({A, l, conj(A)}, {[1, 2, -2], [3, 1], [3, 2, -1]}), 1e-12), 'l should be a left fixed point!')
 assert(ArrayIsEqual(r, ncon({A, r, conj(A)}, {[-1, 2, 1], [1, 3], [-2, 2, 3]}), 1e-12), 'r should be a right fixed point!')
-assert(abs(trace(l*r) - 1) < 1e-12, 'Left and right fixed points should be trace normalised!')
+assert(abs(trace(l*r) - 1) < 1e-12, 'Left and right fixed points should be trace normalized!')
 
 
 %% 1.2 Gauge fixing
 
 % left and right orthonormalisation through taking square root of fixed points
 
-[L, Al] = leftOrthonormaliseNaive(A, l);
-[R, Ar] = rightOrthonormaliseNaive(A, r);
+[L, Al] = leftOrthonormalizeNaive(A, l);
+[R, Ar] = rightOrthonormalizeNaive(A, r);
 
 assert(ArrayIsEqual(R * R', r, 1e-12), 'Right gauge does not square to r')
 assert(ArrayIsEqual(L' * L, l, 1e-12), 'Left gauge does not sqaure to l')
@@ -77,8 +77,8 @@ assert(isequal(size(AlTilde), [3, 3, 3]), 'Something went wrong in truncating th
 
 A = createMPS(D, d);
 
-% normalising an MPS through action of transfer matrix on a left and right matrix as a function handle:
-A = normaliseMPS(A);
+% normalizing an MPS through action of transfer matrix on a left and right matrix as a function handle:
+A = normalizeMPS(A);
 [l, r] = fixedPoints(A);
 
 assert(ArrayIsEqual(l, l', 1e-12), 'left fixed point should be hermitian!')
@@ -86,13 +86,13 @@ assert(ArrayIsEqual(r, r', 1e-12), 'left fixed point should be hermitian!')
 
 assert(ArrayIsEqual(l, ncon({A, l, conj(A)}, {[1, 2, -2], [3, 1], [3, 2, -1]}), 1e-12), 'l should be a left fixed point!')
 assert(ArrayIsEqual(r, ncon({A, r, conj(A)}, {[-1, 2, 1], [1, 3], [-2, 2, 3]}), 1e-12), 'r should be a right fixed point!')
-assert(abs(trace(l*r) - 1) < 1e-12, 'Left and right fixed points should be trace normalised!')
+assert(abs(trace(l*r) - 1) < 1e-12, 'Left and right fixed points should be trace normalized!')
 
 
 % gauging an MPS through iterative QR decompositions:
 [Al, Ac, Ar, C] = mixedCanonical(A);
-% [R, Ar] = rightOrthonormalise(A);
-% [L, Al] = leftOrthonormalise(A);
+% [R, Ar] = rightOrthonormalize(A);
+% [L, Al] = leftOrthonormalize(A);
 
 assert(ArrayIsEqual(eye(D), ncon({Ar, conj(Ar)}, {[-1 1 2], [-2 1 2]}), 1e-12), 'Ar not in right-orthonormal form')
 assert(ArrayIsEqual(eye(D), ncon({Al, conj(Al)}, {[1 2 -2], [1 2 -1]}), 1e-12), 'Al not in left-orthonormal form')
@@ -103,7 +103,7 @@ assert(ArrayIsEqual(LHS, RHS, 1e-12) && ArrayIsEqual(RHS, Ac, 1e-12), 'Something
 
 %% 1.5 Computing expectation values
 A = createMPS(D, d);
-A = normaliseMPS(A);
+A = normalizeMPS(A);
 [l, r] = fixedPoints(A);
 [Al, Ac, Ar, C] = mixedCanonical(A);
 
@@ -166,8 +166,8 @@ function E = createTransfermatrix(A)
 end
 
 
-function Anew = normaliseMPSNaive(A)
-    % Normalise an MPS tensor.
+function Anew = normalizeMPSNaive(A)
+    % Normalize an MPS tensor.
     %
     %     Parameters
     %     ----------
@@ -184,7 +184,7 @@ function Anew = normaliseMPSNaive(A)
     %     Complexity
     %     ----------
     %     O(D ** 6) algorithm,
-    %         directly diagonalising (D ** 2, D ** 2) matrix.
+    %         directly diagonalizing (D ** 2, D ** 2) matrix.
 
     D = size(A, 1);
     E = createTransfermatrix(A);
@@ -211,7 +211,7 @@ function l = leftFixedPointNaive(A)
     %     Complexity
     %     ----------
     %     O(D ** 6) algorithm,
-    %         diagonalising (D ** 2, D ** 2) matrix.
+    %         diagonalizing (D ** 2, D ** 2) matrix.
 
     D = size(A, 1);
     E = createTransfermatrix(A);
@@ -242,7 +242,7 @@ function r = rightFixedPointNaive(A)
     %     Complexity
     %     ----------
     %     O(D ** 6) algorithm,
-    %         diagonalising (D ** 2, D ** 2) matrix.
+    %         diagonalizing (D ** 2, D ** 2) matrix.
 
     D = size(A, 1);
     E = createTransfermatrix(A);
@@ -256,7 +256,7 @@ end
 
 
 function [l, r] = fixedPointsNaive(A)
-    % Find normalised fixed points.
+    % Find normalized fixed points.
     %
     %     Parameters
     %     ----------
@@ -276,18 +276,18 @@ function [l, r] = fixedPointsNaive(A)
     %     Complexity
     %     ----------
     %     O(D ** 6) algorithm,
-    %         diagonalising (D ** 2, D ** 2) matrix
+    %         diagonalizing (D ** 2, D ** 2) matrix
 
     l = leftFixedPointNaive(A);
     r = rightFixedPointNaive(A);
-    l = l / trace(l*r); % normalise
+    l = l / trace(l*r); % normalize
 end
 
 
 %% 1.2 Gauge fixing
 
 
-function [L, Al] = leftOrthonormaliseNaive(A, l)
+function [L, Al] = leftOrthonormalizeNaive(A, l)
     % Transform A to left-orthonormal gauge.
     %
     %     Parameters
@@ -302,14 +302,14 @@ function [L, Al] = leftOrthonormaliseNaive(A, l)
     %         left gauge with 2 legs,
     %         ordered left-right.
     %     Al : array(D, d, D)
-    %         MPS tensor zith 3 legs,
+    %         MPS tensor with 3 legs,
     %         ordered left-bottom-right,
     %         left orthonormal
     %
     %     Complexity
     %     ----------
     %     O(D ** 6) algorithm,
-    %         diagonalising (D ** 2, D ** 2) matrix
+    %         diagonalizing (D ** 2, D ** 2) matrix
 
     if nargin < 2
         l = leftFixedPointNaive(A);
@@ -320,7 +320,7 @@ function [L, Al] = leftOrthonormaliseNaive(A, l)
 end
 
 
-function [R, Ar] = rightOrthonormaliseNaive(A, r)
+function [R, Ar] = rightOrthonormalizeNaive(A, r)
     % Transform A to right-orthonormal gauge.
     %
     %     Parameters
@@ -335,14 +335,14 @@ function [R, Ar] = rightOrthonormaliseNaive(A, r)
     %         right gauge with 2 legs,
     %         ordered left-right.
     %     Ar : array(D, d, D)
-    %         MPS tensor zith 3 legs,
+    %         MPS tensor with 3 legs,
     %         ordered left-bottom-right,
     %         left orthonormal
     %
     %     Complexity
     %     ----------
     %     O(D ** 6) algorithm,
-    %         diagonalising (D ** 2, D ** 2) dmatrix
+    %         diagonalizing (D ** 2, D ** 2) dmatrix
 
     if nargin < 2
         r = rightFixedPointNaive(A);
@@ -365,15 +365,15 @@ function [Al, Ac, Ar, C] = mixedCanonicalNaive(A)
     %     Returns
     %     -------
     %     Al : array(D, d, D)
-    %         MPS tensor zith 3 legs,
+    %         MPS tensor with 3 legs,
     %         ordered left-bottom-right,
     %         left orthonormal.
     %     Ac : array(D, d, D)
-    %         MPS tensor zith 3 legs,
+    %         MPS tensor with 3 legs,
     %         ordered left-bottom-right,
     %         center gauge.
     %     Ar : array(D, d, D)
-    %         MPS tensor zith 3 legs,
+    %         MPS tensor with 3 legs,
     %         ordered left-bottom-right,
     %         right orthonormal.
     %     C : array(D, D)
@@ -386,8 +386,8 @@ function [Al, Ac, Ar, C] = mixedCanonicalNaive(A)
     %     O(D ** 6) algorithm,
     %         diagonalisation of (D ** 2, D ** 2) matrix
 
-    [L, Al] = leftOrthonormaliseNaive(A);
-    [R, Ar] = rightOrthonormaliseNaive(A);
+    [L, Al] = leftOrthonormalizeNaive(A);
+    [R, Ar] = rightOrthonormalizeNaive(A);
     C = L * R;
     [U, C, V] = svd(C);
     % normalize center matrix
@@ -415,15 +415,15 @@ function [AlTilde, AcTilde, ArTilde, CTilde] = truncateMPS(A, Dtrunc)
     %     Returns
     %     -------
     %     AlTilde : array(Dtrunc, d, Dtrunc)
-    %         MPS tensor zith 3 legs,
+    %         MPS tensor with 3 legs,
     %         ordered left-bottom-right,
     %         left orthonormal.
     %     AcTilde : array(Dtrunc, d, Dtrunc)
-    %         MPS tensor zith 3 legs,
+    %         MPS tensor with 3 legs,
     %         ordered left-bottom-right,
     %         center gauge.
     %     ArTilde : array(Dtrunc, d, Dtrunc)
-    %         MPS tensor zith 3 legs,
+    %         MPS tensor with 3 legs,
     %         ordered left-bottom-right,
     %         right orthonormal.
     %     CTilde : array(Dtrunc, Dtrunc)
@@ -450,8 +450,8 @@ end
 %% 1.4 Algorithms for finding canonical forms
 
 
-function Anew =  normaliseMPS(A)
-    % Normalise an MPS tensor.
+function Anew =  normalizeMPS(A)
+    % Normalize an MPS tensor.
     %
     %     Parameters
     %     ----------
@@ -540,7 +540,7 @@ end
 
 
 function [l, r] = fixedPoints(A)
-    % Find normalised fixed points.
+    % Find normalized fixed points.
     % 
     %     Parameters
     %     ----------
@@ -564,14 +564,14 @@ function [l, r] = fixedPoints(A)
     
     l = leftFixedPoint(A);
     r = rightFixedPoint(A);
-    l = l / trace(l*r); % normalise
+    l = l / trace(l*r); % normalize
 end
 
 
 % rqPos: already implemented as function 'lq' in the folder 'AuxiliaryFunctions'
 
 
-function [R, Ar] = rightOrthonormalise(A, R0, tol, maxIter)
+function [R, Ar] = rightOrthonormalize(A, R0, tol, maxIter)
     % Transform A to right-orthonormal gauge.
     % 
     %     Parameters
@@ -594,7 +594,7 @@ function [R, Ar] = rightOrthonormalise(A, R0, tol, maxIter)
     %         right gauge with 2 legs,
     %         ordered left-right.
     %     Ar : array(D, d, D)
-    %         MPS tensor zith 3 legs,
+    %         MPS tensor with 3 legs,
     %         ordered left-bottom-right,
     %         right-orthonormal
 
@@ -633,7 +633,7 @@ end
 % qrPos: already implemented as function 'qrpos' in the folder 'AuxiliaryFunctions'
 
 
-function [L, Al] = leftOrthonormalise(A, L0, tol, maxIter)
+function [L, Al] = leftOrthonormalize(A, L0, tol, maxIter)
     % Transform A to left-orthonormal gauge.
     % 
     %     Parameters
@@ -656,7 +656,7 @@ function [L, Al] = leftOrthonormalise(A, L0, tol, maxIter)
     %         left gauge with 2 legs,
     %         ordered left-right.
     %     Al : array(D, d, D)
-    %         MPS tensor zith 3 legs,
+    %         MPS tensor with 3 legs,
     %         ordered left-bottom-right,
     %         left-orthonormal
             
@@ -705,15 +705,15 @@ function [Al, Ac, Ar, C] = mixedCanonical(A, tol)
     %     Returns
     %     -------
     %     Al : array(D, d, D)
-    %         MPS tensor zith 3 legs,
+    %         MPS tensor with 3 legs,
     %         ordered left-bottom-right,
     %         left orthonormal.
     %     Ac : array(D, d, D)
-    %         MPS tensor zith 3 legs,
+    %         MPS tensor with 3 legs,
     %         ordered left-bottom-right,
     %         center gauge.
     %     Ar : array(D, d, D)
-    %         MPS tensor zith 3 legs,
+    %         MPS tensor with 3 legs,
     %         ordered left-bottom-right,
     %         right orthonormal.
     %     C : array(D, D)
@@ -730,8 +730,8 @@ function [Al, Ac, Ar, C] = mixedCanonical(A, tol)
     end
     D = size(A, 1);
     R0 = randcomplex(D, D); L0 = randcomplex(D, D); % initialize random matrices
-    [L, Al] = leftOrthonormalise(A, L0, tol);
-    [R, Ar] = rightOrthonormalise(A, R0, tol);
+    [L, Al] = leftOrthonormalize(A, L0, tol);
+    [R, Ar] = rightOrthonormalize(A, R0, tol);
     [U, C, V] = svd(L * R);
     % normalize center matrix
     nrm = trace(C * C');
@@ -757,10 +757,10 @@ function o = expVal1Uniform(O, A, l, r)
     %         ordered left-bottom-right.
     %     l : array(D, D), optional
     %         left fixed point of transfermatrix,
-    %         normalised.
+    %         normalized.
     %     r : array(D, D), optional
     %         right fixed point of transfermatrix,
-    %         normalised.
+    %         normalized.
     % 
     %     Returns
     %     -------
@@ -807,10 +807,10 @@ function o = expVal2Uniform(O, A, l, r)
     %         ordered left-bottom-right.
     %     l : array(D, D), optional
     %         left fixed point of transfermatrix,
-    %         normalised.
+    %         normalized.
     %     r : array(D, D), optional
     %         right fixed point of transfermatrix,
-    %         normalised.
+    %         normalized.
     % 
     %     Returns
     %     -------

@@ -1,66 +1,66 @@
-% Matlab script for chapter 1 of Bad Honnef tutorial on "Tangent space
-% methods for Tangent-space methods for uniform matrix product states",
-% based on the lecture notes: https://arxiv.org/abs/1810.07006
+% % Matlab script for chapter 1 of Bad Honnef tutorial on "Tangent space
+% % methods for Tangent-space methods for uniform matrix product states",
+% % based on the lecture notes: https://arxiv.org/abs/1810.07006
+% % 
+% % Detailed explanations of all the different steps can be found in the
+% % python notebooks for the different chapters. These files provide a canvas
+% % for a MATLAB implementation that mirrors the contents of the python
+% % notebooks
 % 
-% Detailed explanations of all the different steps can be found in the
-% python notebooks for the different chapters. These files provide a canvas
-% for a MATLAB implementation that mirrors the contents of the python
-% notebooks
-
-%% 2. Finding ground states of local Hamiltonians
-
-% Unlike the notebooks, where function definitions and corresponding checks
-% are constructed in sequence, here all checks and demonstrations are
-% placed at the start of the script, while all function definitions must
-% be given at the bottom of the script
-
-
-%%
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% DEMONSTRATIONS
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-
-%% 2.2 Gradient descent algorithms
-
-
-% Variational optimization of spin-1 Heisenberg Hamiltonian through
-% minimization of the gradient in uniform gauge
-
-% coupling strengths
-Jx = -1; Jy = -1; Jz = -1; hz = 0; % Heisenberg antiferromagnet
-% Heisenberg Hamiltonian
-h = Heisenberg(Jx, Jy, Jz, hz);
-
-% initialize bond dimension, physical dimension
-D = 12;
-d = 3;
-
-% initialize random MPS
-A = createMPS(D, d);
-A = normaliseMPS(A);
-
-
-% Minimization of the energy through naive gradient descent
-tol = 1e-4; % tolerance for norm of gradient
-fprintf('\n\nGradient descent optimization:\n\n')
-tic;
-[E1, A1] = groundStateGradDescent(h, D, 0.1, A, tol, 5e2);
-t1 = toc;
-fprintf('\nTime until convergence: %fs\n', t1)
-fprintf('Computed energy: %.14f\n\n', E1)
-
-
-% Minimization of the energy using the fminunc minimizer:
-tol = 1e-6; % tolerance for fminunc
-fprintf('\n\nOptimization using fminunc:\n\n')
-tic
-[E2, A2] = groundStateMinimise(h, D, A, tol);
-t2 = toc;
-fprintf('\nTime until convergence: %fs\n', t2)
-fprintf('Computed energy: %.14f\n', E2)
-
+% %% 2. Finding ground states of local Hamiltonians
+% 
+% % Unlike the notebooks, where function definitions and corresponding checks
+% % are constructed in sequence, here all checks and demonstrations are
+% % placed at the start of the script, while all function definitions must
+% % be given at the bottom of the script
+% 
+% 
+% %%
+% 
+% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% % DEMONSTRATIONS
+% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% 
+% 
+% %% 2.2 Gradient descent algorithms
+% 
+% 
+% % Variational optimization of spin-1 Heisenberg Hamiltonian through
+% % minimization of the gradient in uniform gauge
+% 
+% % coupling strengths
+% Jx = -1; Jy = -1; Jz = -1; hz = 0; % Heisenberg antiferromagnet
+% % Heisenberg Hamiltonian
+% h = Heisenberg(Jx, Jy, Jz, hz);
+% 
+% % initialize bond dimension, physical dimension
+% D = 12;
+% d = 3;
+% 
+% % initialize random MPS
+% A = createMPS(D, d);
+% A = normaliseMPS(A);
+% 
+% 
+% % Minimization of the energy through naive gradient descent
+% tol = 1e-4; % tolerance for norm of gradient
+% fprintf('\n\nGradient descent optimization:\n\n')
+% tic;
+% [E1, A1] = groundStateGradDescent(h, D, 0.1, A, tol, 5e2);
+% t1 = toc;
+% fprintf('\nTime until convergence: %fs\n', t1)
+% fprintf('Computed energy: %.14f\n\n', E1)
+% 
+% 
+% % Minimization of the energy using the fminunc minimizer:
+% tol = 1e-6; % tolerance for fminunc
+% fprintf('\n\nOptimization using fminunc:\n\n')
+% tic
+% [E2, A2] = groundStateMinimise(h, D, A, tol);
+% t2 = toc;
+% fprintf('\nTime until convergence: %fs\n', t2)
+% fprintf('Computed energy: %.14f\n', E2)
+% 
 
 %% 2.3 VUMPS
 
@@ -1047,14 +1047,16 @@ function [E, Al, Ac, Ar, C] = vumps(h, D, A0, tol)
     [Al, Ac, Ar, C] = mixedCanonical(A0);
     flag = true;
     delta = 1e-5;
+    i = 0;
     while flag
+        i = i + 1;
         % regularise H
         hTilde = reducedHamMixed(h, Ac, Ar);
         % calculate environments
-        Lh = LhMixed(hTilde, Al, C, delta/10);
-        Rh = RhMixed(hTilde, Ar, C, delta/10);
+        Lh = LhMixed(hTilde, Al, C, delta/100);
+        Rh = RhMixed(hTilde, Ar, C, delta/100);
         % calculate new center
-        [AcTilde, CTilde] = calcNewCenter(hTilde, Al, Ac, Ar, C, Lh, Rh, tol);
+        [AcTilde, CTilde] = calcNewCenter(hTilde, Al, Ac, Ar, C, Lh, Rh, delta/100);
         % find Al, Ar from new Ac, C
         [AlTilde, AcTilde, ArTilde, CTilde] = minAcC(AcTilde, CTilde);
         % calculate norm
@@ -1067,47 +1069,47 @@ function [E, Al, Ac, Ar, C] = vumps(h, D, A0, tol)
         Al = AlTilde; Ac = AcTilde; Ar = ArTilde; C = CTilde;
         % print current energy, optional...
         E = real(expVal2Mixed(h, Ac, Ar));
-        fprintf('Current energy: %.14f\n', E);
+        fprintf('iteration:\t%d,\tenergy:\t%.12f\tgradient norm\t%.4e\n', i, E, delta)
     end
 end
 
 
 %% 2.4 Elementary excitations
 
-function [x,e]=quasiParticle(h,Al,Ar,Ac,C,p,num)
+function [x,e] = quasiParticle(h,Al,Ar,Ac,C,p,num)
 
-tol=1e-12; D=size(Al,1); d=size(Al,2);
+tol = 1e-12; D = size(Al,1); d = size(Al,2);
 % renormalize hamiltonian and find left and right environments
 hTilde = reducedHamMixed(h, Ac, Ar);
 Lh = LhMixed(hTilde, Al, C, tol);
 Rh = RhMixed(hTilde, Ar, C, tol);
 
 % find reduced parametrization
-L=reshape(permute(conj(Al),[3 1 2]),[D D*d]);
+L = reshape(permute(conj(Al),[3 1 2]),[D D*d]);
 VL = reshape(null(L),[D d D*(d-1)]);
 
 [x,e] = eigs(@(x)ApplyHeff(x),D^2*(d-1),num,'sr');
 
 
-function y=ApplyHeff(x)
+function y = ApplyHeff(x)
         
-    x=reshape(x,[D*(d-1) D]);
-    B=ncon({VL,x},{[-1,-2,1],[1,-3]},1);
+    x = reshape(x,[D*(d-1) D]);
+    B = ncon({VL,x},{[-1,-2,1],[1,-3]},1);
     
     % right disconnected
-    right=ncon({B,conj(Ar)},{[-1,2,1],[-2,2,1]});
+    right = ncon({B,conj(Ar)},{[-1,2,1],[-2,2,1]});
     [right, ~] = gmres(@(v)ApplyELR(v,p), reshape(right, [], 1), [], tol);
     right = reshape(right, [D D]);
     
     % left disconnected
-    left=...
+    left = ...
         1*ncon({Lh,B,conj(Al)},{[1,2],[2,3,-2],[1,3,-1]})+...
         1*ncon({Al,B,conj(Al),conj(Al),hTilde},{[1,2,4],[4,5,-2],[1,3,6],[6,7,-1],[3,7,2,5]})+...
         exp(-1i*p)*ncon({B,Ar,conj(Al),conj(Al),hTilde},{[1,2,4],[4,5,-2],[1,3,6],[6,7,-1],[3,7,2,5]});
     [left, ~] = gmres(@(v)ApplyERL(v,-p), reshape(left, [], 1), [], tol);
     left = reshape(left, [D D]);
     
-    y=...
+    y = ...
         1*ncon({B,Ar,conj(Ar),hTilde},{[-1,2,1],[1,3,4],[-3,5,4],[-2,5,2,3]})+...
         exp(1i*p)*ncon({Al,B,conj(Ar),hTilde},{[-1,2,1],[1,3,4],[-3,5,4],[-2,5,2,3]})+...
         exp(-1i*p)*ncon({B,Ar,conj(Al),hTilde},{[4,3,1],[1,2,-3],[4,5,-1],[5,-2,3,2]})+...
@@ -1119,24 +1121,24 @@ function y=ApplyHeff(x)
         exp(-1i*p)*ncon({left,Ar},{[-1,1],[1,-2,-3]})+...
         exp(+1i*p)*ncon({Lh,Al,right},{[-1,1],[1,-2,2],[2,-3]});
         
-    y=ncon({y,conj(VL)},{[1,2,-2],[1,2,-1]});
-    y=reshape(y,[],1);
+    y = ncon({y,conj(VL)},{[1,2,-2],[1,2,-1]});
+    y = reshape(y,[],1);
     
     end
 
-    function y=ApplyELR(x,p)
-        x=reshape(x,[D D]);
-        overlap=ncon({conj(C),x},{[1,2],[1,2]});
-        y=ncon({Al,conj(Ar),x},{[-1,3,1],[-2,3,2],[1,2]});
-        y=x-exp(1i*p)*(y-overlap*C);
-        y=reshape(y,[D^2 1]);
+    function y = ApplyELR(x,p)
+        x = reshape(x,[D D]);
+        overlap = ncon({conj(C),x},{[1,2],[1,2]});
+        y = ncon({Al,conj(Ar),x},{[-1,3,1],[-2,3,2],[1,2]});
+        y = x-exp(1i*p)*(y-overlap*C);
+        y = reshape(y,[D^2 1]);
     end
-    function y=ApplyERL(x,p)
-        x=reshape(x,[D D]);
-        overlap=ncon({conj(C),x},{[1,2],[1,2]});
-        y=ncon({x,Ar,conj(Al)},{[1,2],[2,3,-2],[1,3,-1]});
-        y=x-exp(1i*p)*(y-overlap*C);
-        y=reshape(y,[D^2 1]);
+    function y = ApplyERL(x,p)
+        x = reshape(x,[D D]);
+        overlap = ncon({conj(C),x},{[1,2],[1,2]});
+        y = ncon({x,Ar,conj(Al)},{[1,2],[2,3,-2],[1,3,-1]});
+        y = x-exp(1i*p)*(y-overlap*C);
+        y = reshape(y,[D^2 1]);
     end
 
 end
