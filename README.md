@@ -4,11 +4,21 @@ This repository contains a tutorial on tangent space methods for uniform matrix 
 
 ## Setup and installation
 
-The tutorial is given in the form of IPython Notebooks, which provide a detailed guide through the relevant concepts and algorithms, interspersed with checks and demonstrations. Reference implementations are also given in MATLAB.
+The tutorial is given in the form of IPython Notebooks written in either Julia or Python, which provide a detailed guide through the relevant concepts and algorithms, interspersed with checks and demonstrations. Reference implementations are also given in MATLAB.
 
-The easiest way to get all of the tools needed to open and run the notebooks is to install Python via the anaconda distribution: https://docs.anaconda.com/anaconda/install/. This automatically comes with all packages needed for this tutorial.
+### Julia
 
-If you already have a python version installed, you may [install Jupyter](https://jupyter.org/install) seperately via the [Python Package Index](https://pypi.org/) by running
+For those wondering where to start, we highly recommend using the Julia version of the tutorials. Aside from demonstrating the relevant MPS algorithms, the Julia notebooks also serve as a gentle introduction to the [TensorOperations.jl](https://github.com/Jutho/TensorOperations.jl) and [TensorKit.jl](https://github.com/Jutho/TensorKit.jl) packages for tensor computation. This not only allows for more concise and intuitive implementations compared to ones based on plain multidimensional arrays, but also provides a gateway to more involved tensor network applications using [TensorKit.jl](https://github.com/Jutho/TensorKit.jl) and other packages such as for example [MPSKit.jl](https://github.com/maartenvd/MPSKit.jl).
+
+To run the notebooks, you should have a working Jupyter installation (see below) as well as a functioning [IJulia Jupyter kernel](https://github.com/JuliaLang/IJulia.jl). After this, simply instantiate the environment specified in the 'Project.toml' file in the Julia notebook folder and you are good to go.
+
+### Python
+
+The Python version of the notebooks is slightly more barebones, and implements everything using plain NumPy arrays. This way of working requires less intuition into using tensors as multilinear maps as is done in [TensorKit.jl](https://github.com/Jutho/TensorKit.jl), but comes with some extra overhead in the form of additional reshapes, permutes, casting to and from vectors and the like.
+
+The easiest way to get all of the tools needed to open and run the notebooks is to [install Python via the anaconda distribution](https://docs.anaconda.com/anaconda/install/). This automatically comes with all packages needed for this tutorial.
+
+If you already have a python version installed, you can [install Jupyter](https://jupyter.org/install) seperately via the [Python Package Index](https://pypi.org/) by running
 ```console
 pip install notebook
 ```
@@ -18,11 +28,10 @@ Once jupyter notebook is installed, clone this repository to a local folder of y
 jupyter notebook
 ```
 
-For performing contractions of tensor networks, we have opted to use the Python implementation of the [<code>ncon</code> contractor](https://arxiv.org/abs/1402.0939), which can be found at https://github.com/mhauru/ncon. There are undoubtedly many contraction tools that work equally well and any of them may of course be used, but this one has a particularly intuituve and handy syntax. To install ncon, you may run
+For performing contractions of tensor networks, we have opted to use the Python implementation of the [<code>ncon</code> contractor](https://arxiv.org/abs/1402.0939), which can be found [here](https://github.com/mhauru/ncon). There are undoubtedly many contraction tools that work equally well and any of them may of course be used, but this one has a particularly intuituve and handy syntax. To install ncon, you may run
 ```console
 pip install ncon
 ```
-but we have also included the source code for the ncon function in the tutorial folder for convenience.
 
 
 ## Contents
@@ -40,4 +49,4 @@ In this part the VUMPS algorithm is extended to transfer matrices in the form of
 
 
 ## Use of this tutorial
-Each chapter provides a notebook (.ipynb) file with guided exercices on implementing the algorithms, as well as a solution notebook. Similar files are available for MATLAB. The approach itself is very basic, where all algorithms are broken down and illustrated in digestible steps. The implementations are very simple: there are no black boxes or fancy tricks involved, everything is built from the ground up. While these tutorials were originally intended to be taught at a school on tensor networks, they now serve as a general reference on uniform MPS and how one would go about implementing these concepts.
+Each chapter provides a notebook (.ipynb) file written in Julia or Python with guided exercices on implementing the algorithms, as well as a solution notebook. Similar files are available for MATLAB. The approach itself is very basic, where all algorithms are broken down and illustrated in digestible steps. The implementations are very simple: there are no black boxes or fancy tricks involved, everything is built from the ground up. While these tutorials were originally intended to be taught at a school on tensor networks, they now serve as a general reference on uniform MPS and how one would go about implementing these concepts.
