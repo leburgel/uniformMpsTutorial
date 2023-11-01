@@ -46,7 +46,7 @@ O(D^3) algorithm, D^3 contraction for transfer matrix handle.
 """
 function normalizeMPS(A)
     vals, _, _ =
-        eigsolve(TensorMap(randn, eltype(A), space(A, 1) ← space(A, 1)), 1, :LM) do v
+        eigsolve(TensorMap(randn, scalartype(A), space(A, 1) ← space(A, 1)), 1, :LM) do v
             @tensor vout[-1; -2] := A[-1 2 1] * conj(A[-2 2 3]) * v[1; 3]
         end
 
@@ -73,7 +73,7 @@ O(D^3) algorithm, D^3 contraction for transfer matrix handle.
 function leftFixedPoint(A)
     # calculate fixed point
     _, vecs, _ =
-        eigsolve(TensorMap(randn, eltype(A), space(A, 1) ← space(A, 1)), 1, :LM) do v
+        eigsolve(TensorMap(randn, scalartype(A), space(A, 1) ← space(A, 1)), 1, :LM) do v
             @tensor vout[-1; -2] := A[1 2 -2] * conj(A[3 2 -1]) * v[3; 1]
         end
     l = vecs[1]
@@ -104,7 +104,7 @@ O(D^3) algorithm, D^3 contraction for transfer matrix handle.
 function rightFixedPoint(A)
     # calculate fixed point
     _, vecs, _ =
-        eigsolve(TensorMap(randn, eltype(A), space(A, 1) ← space(A, 1)), 1, :LM) do v
+        eigsolve(TensorMap(randn, scalartype(A), space(A, 1) ← space(A, 1)), 1, :LM) do v
             @tensor vout[-1; -2] := A[-1 2 1] * conj(A[-2 2 3]) * v[1; 3]
         end
     r = vecs[1]
@@ -159,7 +159,7 @@ Transform A to right-orthonormal gauge.
 - `Ar::TensorMap{CartesianSpace, 1, 2}`: MPS tensor with 3 legs of dimension (D, d, D), ordered left-bottom-right, right orthonormal.
 """
 function rightOrthonormalize(
-    A, R0=TensorMap(randn, eltype(A), space(A, 1) ← space(A, 3)); tol=1e-14, maxIter=1e5
+    A, R0=TensorMap(randn, scalartype(A), space(A, 1) ← space(A, 3)); tol=1e-14, maxIter=1e5
 )
     tol = max(tol, 1e-14)
     i = 1
@@ -213,7 +213,7 @@ Transform A to left-orthonormal gauge.
 - `Al::TensorMap{CartesianSpace, 2, 1}`: MPS tensor with 3 legs of dimension (D, d, D), ordered left-bottom-right, left orthonormal.
 """
 function leftOrthonormalize(
-    A, L0=TensorMap(randn, eltype(A), space(A, 1) ← space(A, 3)); tol=1e-14, maxIter=1e5
+    A, L0=TensorMap(randn, scalartype(A), space(A, 1) ← space(A, 3)); tol=1e-14, maxIter=1e5
 )
     tol = max(tol, 1e-14)
     i = 1
@@ -270,8 +270,8 @@ O(D^3) algorithm.
 """
 function mixedCanonical(
     A;
-    L0=TensorMap(randn, eltype(A), space(A, 1) ← space(A, 3)),
-    R0=TensorMap(randn, eltype(A), space(A, 1) ← space(A, 3)),
+    L0=TensorMap(randn, scalartype(A), space(A, 1) ← space(A, 3)),
+    R0=TensorMap(randn, scalartype(A), space(A, 1) ← space(A, 3)),
     tol=1e-14,
     maxIter=1e5,
 )
@@ -410,7 +410,7 @@ function KrylovKit.eigsolve(
     t::TensorMap,
     howmany::Int=1,
     which::KrylovKit.Selector=:LM,
-    T::Type=eltype(t);
+    T::Type=scalartype(t);
     kwargs...,
 )
     domain(t) == codomain(t) ||
