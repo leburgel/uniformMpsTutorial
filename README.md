@@ -1,6 +1,6 @@
 # uniformMpsTutorial
 
-This repository contains a tutorial on tangent space methods for uniform matrix product states, originally written to be taught at the [2020 school on Tensor Network based approaches to Quantum Many-Body Systems](http://quantumtensor.pks.mpg.de/index.php/schools/2020-school/) held in Bad Honnef, Germany. The tutorials are based on the lecture notes ['Tangent-space methods for uniform matrix product states'](https://doi.org/10.21468/SciPostPhysLectNotes.7) by Laurens Vanderstraeten, Jutho Haegeman and Frank Verstraete.
+This repository contains a tutorial on tangent space methods for uniform matrix product states, originally written to be taught at the [2020 school on Tensor Network based approaches to Quantum Many-Body Systems](https://nextcloud.tfk.ph.tum.de/etn/index.php/schools/2020-school/) held in Bad Honnef, Germany. The tutorials are based on the lecture notes ['Tangent-space methods for uniform matrix product states'](https://doi.org/10.21468/SciPostPhysLectNotes.7) by Laurens Vanderstraeten, Jutho Haegeman and Frank Verstraete.
 
 ## Setup and installation
 
